@@ -18,7 +18,7 @@ To setup a new development environment:
 package name:
  name carefully.
  provides context for everything in the package.
- A well-chosen name is therefore the starting point for good documentatio.n
+ A well-chosen name is therefore the starting point for good documentation
  short, concise, evocative
  By convention, packages are given lower case, single-word names; there should be no need for underscores or mixedCaps.
 
@@ -70,5 +70,6 @@ Name conventions in go:
     http://golang.org/doc/effective_go.html#names
     Long names don't automatically make things more readable.
     A helpful doc comment can often be more valuable than an extra long name.
+    cammelCase seems to appear frequently in twoWord function and variable names???
 */
 package organizing
