@@ -43,13 +43,22 @@ kafka output options:
  - some kind of header for figuring out which type of message this is???
  - buffer message by duration only. if the messages become too large, change the duration.
 
+kafka partitioning????
+ - client's responsibility to determine which partition to send which message to??
+ - default: hash(key) % numPartitions
+
+
+log.io harvester: https://github.com/NarrativeScience/Log.io/blob/master/src/harvester.coffee
+ - through kafka topic, or directly to a separate app????
+
+metric creation:
+ - fix the statsd bucketing errors and demonstrate flat heartbeat rate
+ - send metrics through kafka like all other events for later replay, and/or??? directly to graphite
 
 come up with a name for this app ????
 
-
 deduplicate lines each time a new file is tailed!
 
-same for lines received on udp
 
 TODO:
 * read through "tail" and lumberjack to determine possible issues with file tailing
