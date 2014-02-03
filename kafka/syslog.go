@@ -8,7 +8,8 @@ import (
 /*
 syslog harvester:
 
-listen on syslog port
+watch file... may be a fifo or a normal file????
+
 serialize and bucket by timestamp
 compress and send to kafka
 
@@ -28,6 +29,14 @@ rough disk based queue process for a single "queue":
 * wait "delay", then read file and send as a single kafka message
 * delete file after ack
 
+telling rsyslog to output useful fields:
+
+  # http://www.rsyslog.com/what-is-the-difference-between-timereported-and-timegenerated/
+  # can't rely on timereported. timegenerated is always the high precision time when syslog receives the message
+
+  /etc/rsyslog.d/0-harvest.conf
+  $template harvest,"%timegenerated:::date-rfc3339%,%syslogpriority-text%,%syslogfacility-text%,%programname%,%msg%\n"
+  *.* /var/log/harvest;harvest
 
 */
 func main() {

@@ -8,15 +8,25 @@ import (
 )
 
 /*
-get events to their final format before they leave the server
-split events for low-latency and high latency at the server
-log events to a lossless long term data store for replay later
-allow the events to be extracted by data_source and time_range for analysis
-allow low-latency streaming of events for analysis in browser of incoming events
-allow a dedicated high-performance recent-only index of the last 6 hours
-allow the option to bypass kafka and send udp directly to the host(s) specified???
-allow the option to have an unbuffered low latency kafka topic in addition to the long term storage topic
-allow pruning by debug level?
+kafka brokers receive and buffer events so another consumer process can query, pack up, and send to s3
+
+parse enough of the message to determine:
+ - high precision time of the event
+ - if it should also be sent through the low-latency path
+ - if any metrics should be generated and sent directly to graphite
+
+
+kafka topic:
+ - maybe just a single topic with a large number of partitions that all messages go into???
+ - or maybe divide topics by ??? facility, priority, service name, process name, environment (prod, qa, dev) ???
+
+
+kafka partitioning:
+ - each topic is partitioned into P partitions and replicated by factor N
+ - brokers do not enforce which message goes in which topic or partition
+ - producer/consumer must agree on how to generate topic and partition for each message sent/received
+ - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
+
 
 message authenticity?????
 * a bit of server identity
