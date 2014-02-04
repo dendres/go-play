@@ -35,9 +35,9 @@ Assumptions
 Services
 ========
 
-harvester:
+tailer:
 
-* runs on ever server that produces log and metric events
+* runs on every server that produces log and metric events
 * input plugins accept various event serializations and normalize events enough to determine how to forward them
 * log file tail: process lines starting at the end of the file. go back max 24 hours. journal by timestamp
 * add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
@@ -47,62 +47,61 @@ harvester:
 * send to kafka over optional encrypted channel
 
 
-sorter:
+kafka:
 
-* a single-instance non-redundant service that can be offline for 2 days with minimal impact
-* bucket messages on local ephemeral disk
+* queues messages from harvester on disk for D days
+* cluster of 3 to 5 nodes (starting with the smallest nodes that do not crash)
+* non-raid ephemeral disks
+
+
+logio:
+
+* runs on each log.io server
+* for each kafka message, extract the events and send them to the local log.io instance
+
+
+porter:
+
+* for each kafka message, form an elasticsearch bulk import
+* cluster of 3 to 5 nodes
+* manage D days worth of logstash-style (but smaller) "hour" elasticsearch indexes
+
+
+buck:
+
+* bucket messages onto local ephemeral filesystem then compress and archive to s3
+* a SPOF that can be offline for up to 2 days with minimal impact
 * after 48 hours process the oldest buckets
 * sort, bz2, send to s3
 
 
+archie:
 
-
-es_recent: XXX Better name?
-* watch topic for the assigned environment "h-<environment_name>"
-* pub/sub receive all messages on the topic
-* process each message into an elasticsearch bulk import on the "recent" elasticsearch cluster
-* drop logstash-style-day indexes after X days (configurable)
-
-
-indexer:
-
-* kafka and s3 client
+* generate elasticsearch indexes on demand from archive
 * takes (environment_name, start_time, end_time)
 * generates a tmp index name based on the input paramaters and return it to the caller
 * makes a list of 5min time blocks to retrieve
-* downloads blocks from kafka and/or s3
-* stream messages out of the compressed blocks
+* downloads blocks from kafka (if available) and/or s3
 * form elasticsearch bulk import messages
-* import data into elasticsearch, and then delete each block
-
-
-log.io receiver:
-
-* cluster receives and deduplicates messages UDP from clients
-* accept pub-sub log.io connections
-* broker messages through to log.io with minimal latency
-
 
 
 Stage 1
 =======
 
-harvester service and kafka:
-
-* syslog -> kafka -> es_consumer -> kibana recent index
-* add optional NaCL transport encryption to client and setup corresponding proxy service on kafka server
+* all_syslog -> file -> tailer -> kafka -> logio
+* with optional NaCL transport encryption
 
 
 Stage 2
 =======
 
-* harvester -> log.io
+* porter -> kibana "recent"
 
 
 Stage 3
 =======
 
-* compressor and indexer services
+* buck and archie
 
 
 Stage 4
