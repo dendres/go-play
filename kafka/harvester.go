@@ -45,6 +45,12 @@ each topic is partitioned into P partitions and replicated by factor N
  - producer/consumer must agree on how to generate topic and partition for each message sent/received
  - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
 
+https://cwiki.apache.org/confluence/display/KAFKA/FAQ#FAQ-HowdoIchoosethenumberofpartitionsforatopic?
+ - more partitions mean smaller writes and more memory needed for VFS buffering
+ - less partitions mean less kafka servers and more files in a given FS tree.
+ - each partition has a small zookeeper cost.
+ - more partitions mean more consumer checkpointing
+
 kafka partitioning:
  - timestamp: number of 30 second periods since unix epoch
  - message uniqueness: hostname + timestamp
