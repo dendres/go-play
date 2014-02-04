@@ -8,24 +8,62 @@ import (
 )
 
 /*
-kafka brokers receive and buffer events so another consumer process can query, pack up, and send to s3
+harvester:
+* runs on ever server that produces log and metric events
+* input plugins accept various event serializations and normalize events enough to determine how to forward them
+* add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
+* remove any duplicate fields
+* send to log.io server based on filter criteria
+* buffer 30 seconds
+* gzip
+* kafka topic: "h-<environment_name>"
+* kafka partition: based on timestamp... hash timestamp or mod timestamp or something????
+* send to kafka
+
+
+starting with file tail input:
+* assume a file where new messages are appended
+* best effort to handle: deleted file, deleted lines at the top/middle of the file
+* the file may be rotated
+* the file may be a symlink pointing to another file that gets rotated
+* deduplicate messages by tracking line number and timestamp
+* group messages into 30 second buckets
+
 
 parse enough of the message to determine:
  - high precision time of the event
  - if it should also be sent through the low-latency path
  - if any metrics should be generated and sent directly to graphite
 
-
 kafka topic:
- - maybe just a single topic with a large number of partitions that all messages go into???
- - or maybe divide topics by ??? facility, priority, service name, process name, environment (prod, qa, dev) ???
+ - h-<environment_name>
 
-
-kafka partitioning:
- - each topic is partitioned into P partitions and replicated by factor N
+each topic is partitioned into P partitions and replicated by factor N
+ - partitions spread load across brokers
+ - a single partition must not be bigger than the disk available on that broker
  - brokers do not enforce which message goes in which topic or partition
  - producer/consumer must agree on how to generate topic and partition for each message sent/received
  - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
+
+kafka partitioning:
+ - timestamp: number of 30 second periods since unix epoch
+ - message uniqueness: hostname + timestamp
+ - small number of kafka brokers 3 or 5
+ - not really a penalty for too many partitions????
+ - make the partition_count a client setting... start with 100?
+
+map hostname onto partitions:
+ - hostname scheme: treat hostname as base36 integer
+ - convert to base10 integer
+ - % partition_count
+
+
+so to send a message, the kafka client needs: environment and hostname ONLY!!!
+these are converted to topic and partition
+
+
+
+
 
 
 message authenticity?????
