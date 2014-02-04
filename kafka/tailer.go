@@ -2,6 +2,128 @@ package main
 
 import (
 	"bufio"
+	"io"
+	"log"
+	"os/exec"
+)
+
+/*
+starting with file tail input:
+* assume a file where new messages are appended
+* best effort to handle: deleted file, deleted lines at the top/middle of the file
+* the file may be rotated
+* the file may be a symlink pointing to another file that gets rotated
+* deduplicate messages by tracking line number and timestamp
+* group messages into 30 second buckets
+
+# XXX find a module or work through the details about tailing the file here
+
+deduplicate lines each time a new file is tailed!
+journal messages:
+ - message_id ??  increment, timestamp, source, checksum, etc...
+ - read a file backlog from a configurable starting point (lines_back, duration_back)
+ - once the journal is established, align the journal with the log file to find the correct starting point
+
+buffer to disk. why??
+- buffer to memory... cause disk swapping under pressure
+- buffer to disk and VFS cache uses memory when it is available
+
+XXXX disk buffer in single file or multiple files???
+ - http://www.advancedlinuxprogramming.com/alp-folder/alp-apB-low-level-io.pdf
+
+
+
+
+*/
+func file_tail() {
+}
+
+/*
+tailer:
+* runs on ever server that produces log and metric events
+* input plugins accept various event serializations and normalize events enough to determine how to forward them
+* add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
+* remove any duplicate fields
+* send to log.io server based on filter criteria
+* buffer 30 seconds
+* gzip
+* kafka topic: "h-<environment_name>"
+* kafka partition: based on timestamp... hash timestamp or mod timestamp or something????
+* send to kafka
+
+
+
+parse enough of the message to determine the high precision time of the event
+
+
+kafka topic: t-<environment_name>
+kafka partition: rand_int % partition_count
+reconnect every N seconds or message sending cycles????
+
+each topic is partitioned into P partitions and replicated by factor N
+ - partitions spread load across brokers
+ - a single partition must not be bigger than the disk available on that broker
+ - brokers do not enforce which message goes in which topic or partition
+ - producer/consumer must agree on how to generate topic and partition for each message sent/received
+   XXX or not they can both agree to not care and choose a random partition!!!!
+ - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
+
+https://cwiki.apache.org/confluence/display/KAFKA/FAQ#FAQ-HowdoIchoosethenumberofpartitionsforatopic?
+ - more partitions mean smaller writes and more memory needed for VFS buffering
+ - less partitions mean less kafka servers and more files in a given FS tree.
+ - each partition has a small zookeeper cost.
+ - more partitions mean more consumer checkpointing
+
+if the client is configured to send/receive to/from multiple partitions, then it must keep multiple open tcp connections
+
+
+message authenticity?????
+* a bit of server identity
+* how do I know this message is real?
+* where did it come from?
+XXXX do not wory about this on a per-message basis.
+XXXX address at the tcp connection layer with shared secret and transport encryption
+
+
+
+
+
+log.io harvester: https://github.com/NarrativeScience/Log.io/blob/master/src/harvester.coffee
+ - through kafka topic, or directly to a separate app????
+
+metric creation:
+ - fix the statsd bucketing errors and demonstrate flat heartbeat rate
+ - send metrics through kafka like all other events for later replay, and/or??? directly to graphite
+
+come up with a name for this app ????
+
+
+
+
+TODO:
+* read through "tail" and lumberjack to determine possible issues with file tailing
+* test the go kafka producer and consumer
+   https://github.com/jdamick/kafka
+   https://github.com/Shopify/sarama
+* investigate delivery guarantees, message identity requirements and message journaling
+*  document how other projects do it
+
+
+
+
+
+
+
+
+*/
+func main() {
+	log.SetFlags(log.Ltime | log.Lmicroseconds)
+	log.Println("start main")
+}
+package main
+
+import (
+	"bufio"
 	"bytes"
 	"io"
 	"log"
