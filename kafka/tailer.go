@@ -23,17 +23,26 @@ telling rsyslog to output useful fields:
 */
 
 /*
-how many partitions????        tl;dr = 15
+kafka topic = t-<environment_name>
+* a single topic name for all events
+* prefix for the project to avoid conflicts with other projects. a single letter and dash should be sufficient.
+* arbitrary string "environment" or "domain" is how you divide up servers by risk and customer exposure or management group etc...
+*/
+
+/*
+kafka partition count = 15
 
 each topic is partitioned into P partitions and replicated by factor N
  - partitions spread load across brokers
  - a single partition must not be bigger than the disk available on that broker
+ - If you configure multiple data directories, partitions will be assigned round-robin to data directories. Each partition will be entirely in one of the data directories. If data is not well balanced among partitions this can lead to load imbalance between disks.
  - brokers do not enforce which message goes in which topic or partition
  - producer/consumer must agree on how to generate topic and partition for each message sent/received
    XXX or not they can both agree to not care and choose a random partition!!!!
  - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
 
 https://cwiki.apache.org/confluence/display/KAFKA/FAQ#FAQ-HowdoIchoosethenumberofpartitionsforatopic?
+ - "Clusters with up to 10k total partitions are quite workable"
  - more partitions mean smaller writes and more memory needed for VFS buffering
  - less partitions mean less kafka servers and more files in a given FS tree.
  - each partition has a small zookeeper cost.
@@ -46,9 +55,20 @@ if the client is configured to send/receive to/from multiple partitions, then it
 avoid more than 5 kafka servers
 so the partition count should be a common multiple of both 3 and 5
 
-assuming separate 4TB hdd's:
-5 partitions = 20T topic size
-15 partitions = 75T topic size
+assume separate 4TB hdd's
+assume 1k messages under a 2/1 compression ratio
+assume a target message rate of 10Km/s
+how many partitions are required to store 30 days of messages in a single topic?
+  bytes rate/s   m    h    d   days   KB     MB     GB     TB   disk size = min number of partitions
+  500 * 10000 * 60 * 60 * 24 * 30 / 1024 / 1024 / 1024 / 1024 / 4         = 2.964
+
+what is the message rate limit with 15 partitions?
+  part TB    GB     MB     KB  bytes  msgs days    h    m    s = messages per second
+  15 * 4 * 1024 * 1024 * 1024 * 1024 / 500 / 30 / 24 / 60 / 60 = 50Km/s
+
+what is the disk write bandwidth used at 50Km/s?
+   msgs bytes     KB     MB = MB per second
+  50000 * 500 / 1024 / 1024 = 23MB/s XXX probably not near correct
 
 */
 

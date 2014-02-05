@@ -8,11 +8,10 @@ import (
 )
 
 /*
-interface kafka for the logio system??????
+port the log.io server
+replace tcp connection with kafka consumer
 
-listen for incoming messages
-
-send them to the local log.io system?????
+https://github.com/NarrativeScience/Log.io/blob/master/src/server.coffee
 
 */
 func main() {

@@ -70,7 +70,7 @@ porter:
 buck:
 
 * bucket messages onto local ephemeral filesystem then compress and archive to s3
-* a SPOF that can be offline for up to 2 days with minimal impact
+* a SPOF server that can be offline for up to 2 days with minimal impact
 * after 48 hours process the oldest buckets
 * sort, bz2, send to s3
 
@@ -81,7 +81,7 @@ archie:
 * takes (environment_name, start_time, end_time)
 * generates a tmp index name based on the input paramaters and return it to the caller
 * makes a list of 5min time blocks to retrieve
-* downloads blocks from kafka (if available) and/or s3
+* downloads blocks from s3
 * form elasticsearch bulk import messages
 
 
