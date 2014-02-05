@@ -2,21 +2,65 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"log"
-	"os/exec"
+	"os" // for File and friends
+	"time"
 )
+
+/*
+
+telling rsyslog to output useful fields:
+
+  # http://www.rsyslog.com/what-is-the-difference-between-timereported-and-timegenerated/
+  # can't rely on timereported. timegenerated is always the high precision time when syslog receives the message
+
+  /etc/rsyslog.d/0-harvest.conf
+  $template harvest,"%timegenerated:::date-rfc3339%,%syslogpriority-text%,%syslogfacility-text%,%programname%,%msg%\n"
+  *.* /var/log/harvest;harvest
+
+*/
+
+/*
+how many partitions????        tl;dr = 15
+
+each topic is partitioned into P partitions and replicated by factor N
+ - partitions spread load across brokers
+ - a single partition must not be bigger than the disk available on that broker
+ - brokers do not enforce which message goes in which topic or partition
+ - producer/consumer must agree on how to generate topic and partition for each message sent/received
+   XXX or not they can both agree to not care and choose a random partition!!!!
+ - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
+
+https://cwiki.apache.org/confluence/display/KAFKA/FAQ#FAQ-HowdoIchoosethenumberofpartitionsforatopic?
+ - more partitions mean smaller writes and more memory needed for VFS buffering
+ - less partitions mean less kafka servers and more files in a given FS tree.
+ - each partition has a small zookeeper cost.
+ - more partitions mean more consumer checkpointing
+
+if the client is configured to send/receive to/from multiple partitions, then it must keep multiple open tcp connections
+
+3 kafka servers is ideal
+5 kafka servers is ok
+avoid more than 5 kafka servers
+so the partition count should be a common multiple of both 3 and 5
+
+assuming separate 4TB hdd's:
+5 partitions = 20T topic size
+15 partitions = 75T topic size
+
+*/
 
 /*
 starting with file tail input:
 * assume a file where new messages are appended
-* best effort to handle: deleted file, deleted lines at the top/middle of the file
 * the file may be rotated
 * the file may be a symlink pointing to another file that gets rotated
-* deduplicate messages by tracking line number and timestamp
-* group messages into 30 second buckets
+* follow_name behavior = track the file by name
+* handle inotify events for the file being moved, removed, renamed, written over, etc...
+* deduplicate messages by tracking line number, timestamp, and some kind of cheap checksum for the message???
 
-# XXX find a module or work through the details about tailing the file here
 
 deduplicate lines each time a new file is tailed!
 journal messages:
@@ -38,152 +82,6 @@ XXXX disk buffer in single file or multiple files???
 func file_tail() {
 }
 
-/*
-tailer:
-* runs on ever server that produces log and metric events
-* input plugins accept various event serializations and normalize events enough to determine how to forward them
-* add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
-* remove any duplicate fields
-* send to log.io server based on filter criteria
-* buffer 30 seconds
-* gzip
-* kafka topic: "h-<environment_name>"
-* kafka partition: based on timestamp... hash timestamp or mod timestamp or something????
-* send to kafka
-
-
-
-parse enough of the message to determine the high precision time of the event
-
-
-kafka topic: t-<environment_name>
-kafka partition: rand_int % partition_count
-reconnect every N seconds or message sending cycles????
-
-each topic is partitioned into P partitions and replicated by factor N
- - partitions spread load across brokers
- - a single partition must not be bigger than the disk available on that broker
- - brokers do not enforce which message goes in which topic or partition
- - producer/consumer must agree on how to generate topic and partition for each message sent/received
-   XXX or not they can both agree to not care and choose a random partition!!!!
- - once a topic and partition have been chosen, brokers can be asked which server is Leader for the given partition
-
-https://cwiki.apache.org/confluence/display/KAFKA/FAQ#FAQ-HowdoIchoosethenumberofpartitionsforatopic?
- - more partitions mean smaller writes and more memory needed for VFS buffering
- - less partitions mean less kafka servers and more files in a given FS tree.
- - each partition has a small zookeeper cost.
- - more partitions mean more consumer checkpointing
-
-if the client is configured to send/receive to/from multiple partitions, then it must keep multiple open tcp connections
-
-
-message authenticity?????
-* a bit of server identity
-* how do I know this message is real?
-* where did it come from?
-XXXX do not wory about this on a per-message basis.
-XXXX address at the tcp connection layer with shared secret and transport encryption
-
-
-
-
-
-log.io harvester: https://github.com/NarrativeScience/Log.io/blob/master/src/harvester.coffee
- - through kafka topic, or directly to a separate app????
-
-metric creation:
- - fix the statsd bucketing errors and demonstrate flat heartbeat rate
- - send metrics through kafka like all other events for later replay, and/or??? directly to graphite
-
-come up with a name for this app ????
-
-
-
-
-TODO:
-* read through "tail" and lumberjack to determine possible issues with file tailing
-* test the go kafka producer and consumer
-   https://github.com/jdamick/kafka
-   https://github.com/Shopify/sarama
-* investigate delivery guarantees, message identity requirements and message journaling
-*  document how other projects do it
-
-
-
-
-
-
-
-
-*/
-func main() {
-	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	log.Println("start main")
-}
-package main
-
-import (
-	"bufio"
-	"bytes"
-	"io"
-	"log"
-	"os" // for File and friends
-	"time"
-)
-
-/*
-syslog harvester:
-
-starting with file tail input:
-* assume a file where new messages are appended and the file is rotated
-* best effort to handle: deleted file, deleted lines at the top/middle of the file, symlinks and symlink changes???
-* deduplicate messages by tracking line number and timestamp????
-  XXX integrate this with kafka's "offset" ????
-  kafka broker returns the "offset" with producer_response message
-
-
-
-parse enough of the message to determine:
- - high precision time of the event
- - if it should also be sent through the low-latency path
- - if any metrics should be generated and sent directly to graphite
-
-
-
-telling rsyslog to output useful fields:
-
-  # http://www.rsyslog.com/what-is-the-difference-between-timereported-and-timegenerated/
-  # can't rely on timereported. timegenerated is always the high precision time when syslog receives the message
-
-  /etc/rsyslog.d/0-harvest.conf
-  $template harvest,"%timegenerated:::date-rfc3339%,%syslogpriority-text%,%syslogfacility-text%,%programname%,%msg%\n"
-  *.* /var/log/harvest;harvest
-
-stage1:
- - tail fail and setup test cases
-
-stage2:
- - parse specific syslog format
-
-stage3:
- - track line number and last few timestamps... to try for once and only once reading each line from the file
-
-develop a strategy based on:
- - http://git.savannah.gnu.org/cgit/coreutils.git/tree/src/tail.c
- - https://github.com/elasticsearch/logstash-forwarder harvester.go
- - https://github.com/mozilla-services/heka/blob/dev/logstreamer/filehandling.go
-   LogStream, LogStreamLocation
- - https://github.com/NarrativeScience/Log.io/blob/master/src/harvester.coffee
- - https://github.com/howeyc/fsnotify/blob/master/fsnotify_linux.go
-
-follow_name behavior:
- - track the file by name.  handle inotify events for the file being moved, removed, renamed, written over, etc...
-
-
-
-
-
-*/
 type Harvester struct {
 	// full Path to the file being tailed
 	Path   string
@@ -323,6 +221,40 @@ func (h *Harvester) Harvest(output chan *FileEvent) {
 	} /* forever */
 }
 
+/*
+tailer:
+
+* runs on every server that produces log and metric events
+* log file tail: process lines starting at the end of the file. go back max 24 hours. journal by timestamp
+* add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
+* remove any duplicate fields
+* arbitrarily buffer a few messages and gzip
+* kafka topic: "t-<environment_name>", partition: rand_int % partition_count=15
+* send to kafka over optional encrypted channel
+* choose a new topic and reconnect every M minutes
+
+
+stage1:
+ - just read from the end of the file and write the failing test cases
+
+stage2:
+ - then design to cover the cases
+ - parse specific syslog format
+
+stage3:
+ - track line number and last few timestamps... to try for once and only once reading each line from the file
+
+develop a strategy based on:
+ - http://git.savannah.gnu.org/cgit/coreutils.git/tree/src/tail.c
+ - https://github.com/elasticsearch/logstash-forwarder harvester.go
+ - https://github.com/mozilla-services/heka/blob/dev/logstreamer/filehandling.go
+   LogStream, LogStreamLocation
+ - https://github.com/NarrativeScience/Log.io/blob/master/src/harvester.coffee
+ - https://github.com/howeyc/fsnotify/blob/master/fsnotify_linux.go
+ - https://github.com/jdamick/kafka
+ - https://github.com/Shopify/sarama
+
+*/
 func main() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 	log.Println("start main")

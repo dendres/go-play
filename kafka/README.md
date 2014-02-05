@@ -38,13 +38,13 @@ Services
 tailer:
 
 * runs on every server that produces log and metric events
-* input plugins accept various event serializations and normalize events enough to determine how to forward them
 * log file tail: process lines starting at the end of the file. go back max 24 hours. journal by timestamp
 * add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
 * remove any duplicate fields
 * arbitrarily buffer a few messages and gzip
-* kafka topic: "h-<environment_name>", partition: hostname.to_i(36) % partition_count=(3 or 5) ??
+* kafka topic: "t-<environment_name>", partition: rand_int % partition_count=15
 * send to kafka over optional encrypted channel
+* choose a new topic and reconnect every M minutes
 
 
 kafka:
