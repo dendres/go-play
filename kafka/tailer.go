@@ -20,6 +20,22 @@ telling rsyslog to output useful fields:
   $template harvest,"%timegenerated:::date-rfc3339%,%syslogpriority-text%,%syslogfacility-text%,%programname%,%msg%\n"
   *.* /var/log/harvest;harvest
 
+  by default, rsyslog guarantees that every log line will start with the timestamp.
+  http://www.rsyslog.com/doc/rsconf1_escapecontrolcharactersonreceive.html
+
+  with $MaxMessageSize 64k, got a message with 65556 characters... the remainder was truncated
+     XXX sent to syslog from go. FYI: the bsd "logger" splits messages into 1024 character chunks
+
+  every VALID line will have exactly the format specified in the template
+
+  every VALID message will be 1024 characters or less.
+
+  large messages are split by syslog, or by the logger application?????
+
+  some effort should be put into restoring the escape sequences ????  probably not
+
+
+
 */
 
 /*
