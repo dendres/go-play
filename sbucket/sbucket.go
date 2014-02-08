@@ -9,22 +9,26 @@ import (
 )
 
 // allow a flexible specification that forces "reasonable" base10 buckets
+// negative means fractional: 2 becomes 0.01 and 3 becomes 0.001 etc...
+
+// allow a flexible specification that forces "reasonable" base10 buckets
 // return , ns, us, ms, s, 10s, and 5m string "buckets" from time.Now()
 // negative means 10^-X and truncates digits off nanosecond time
 // positive means number of seconds in the bucket
 // 0 < x <= 1: the bucket size will be forced to divide evenly into minute
 // x > 1: forced to multiple of min
-// x > 1: forced to a multiple of hour
-func Stamp(ti time.Time, size int) (string, int) {
+// x > 60: forced to a multiple of hour
+// x > 3600: force multiple of a day
+func TenStamp(ti time.Time, size int) (string, int) {
 	out := "fail"
 	sec := ti.Unix() // int64
 
 	switch {
-
 	case size < 0:
 		if size < -9 { // force nanosecond minimum
 			size = -9
 		}
+
 		nsec := int64(ti.Nanosecond())
 		pow := int64(math.Pow10(-1 * size)) // like 100 or 1000
 
@@ -47,28 +51,41 @@ func Stamp(ti time.Time, size int) (string, int) {
 		for size%60 != 0 { // force multiple of minute
 			size++
 		}
-
 		for 3600%size != 0 { // force divisor of hour
 			size++
 		}
-		out = strconv.FormatInt(sec-(sec%int64(size)), 10) // round down to a multiple of size
-
+		out = strconv.FormatInt(sec-(sec%int64(size)), 10)
 		if size%10 == 0 {
-			out = out[:len(out)-1] // strip digit
+			out = out[:len(out)-1]
 		}
 		if size%100 == 0 {
-			out = out[:len(out)-1] // strip digit
+			out = out[:len(out)-1]
 		}
-		if size%1000 == 0 {
-			out = out[:len(out)-1] // strip digit
-		}
-	default:
-		for size%3600 != 0 { // force multiple of hour
+	case size <= 86400:
+		for size%36000 != 0 {
 			size++
 		}
-		out = strconv.FormatInt(sec-(sec%int64(size)), 10) // round down to a multiple of size
-		// find what power of 10 size is.
-		// strip that many digits
+		for 86400%size != 0 {
+			size++
+		}
+		out = strconv.FormatInt(sec-(sec%int64(size)), 10)
+		if size%10 == 0 {
+			out = out[:len(out)-1]
+		}
+		if size%100 == 0 {
+			out = out[:len(out)-1]
+		}
+		if size%1000 == 0 {
+			out = out[:len(out)-1]
+		}
+	default:
+		for size%86400 != 0 { // force multiple of day
+			size++
+		}
+		out = strconv.FormatInt(sec-(sec%int64(size)), 10)
+		if size%10 == 0 {
+			out = out[:len(out)-1]
+		}
 	}
 
 	return out, size
@@ -157,10 +174,12 @@ func Open(t *testing.T) {
 }
 
 // determine a reasonable precision time that can be stored in a int64
-// ((2^64 / 2) - 1) / 365 / 24 / 60 / 60 / 1000000000 = 292 years +- unix epoch in ns
-// ((2^64 / 2) - 1) / 365 / 24 / 60 / 60 / 1000000 = 292K years +- unix epoch in us
-// ((2^64 / 2) - 1) / 365 / 24 / 60 / 60 / 1000 = 292M years +- unix epoch in ms
+// ((2^63 / 2) - 1) / 365 / 24 / 60 / 60 / 1000000000 = 146 years +- unix epoch in ns
+// ((2^63 / 2) - 1) / 365 / 24 / 60 / 60 / 1000000 = 146K years +- unix epoch in us
+// ((2^63 / 2) - 1) / 365 / 24 / 60 / 60 / 1000 = 146M years +- unix epoch in ms
 // convert time.Now() into each of these formats
+
+// uint64 is ((2^64 / 2) - 1) / 365 / 24 / 60 / 60 / 1000000000 = 292 years
 
 // UnixNano returns t as a Unix time, the number of nanoseconds elapsed
 // since January 1, 1970 UTC. The result is undefined if the Unix time
