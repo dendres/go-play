@@ -1,7 +1,7 @@
 package sbucket
 
 import (
-	"encoding/binary"
+	// "encoding/binary"
 	"fmt"
 	"math"
 	"strconv"
@@ -9,39 +9,146 @@ import (
 	"time"
 )
 
+/*
+storing years:
+35 bits stores 2^35-1 seconds ~ 1089.54 years
+epoch is 1970, so the stamp loops during the year 1970 + 1089 = 3059
+there will be no record of this code by Jan 1 3059
+*/
+
+/*
+storing fractional second:
+
+takes 30 bits to store nanoseconds: 2^29 - 999,999,999 = -463,129,087
+
+25 bits stores the number of ~ 30ns intervals that divide the second
+
+translate 0.999999 into the number of 29ns intervals since the start of the second?
+  0.999999 * 2^29 -1
+
+translate 25bit integer back into a fractional second:
+  0 / 2^25-1 = 0
+  1 / 2^25-1 ~ 29.802323ns
+  2 / 2^25-1 ~ 59.604646ns
+  2^25-1/2^25-1 = 1 second
+
+translate 20bit integer back into fractional second:
+  0 / 2^20-1 = 0
+  1 / 2^20-1 = 953.675225ns
+  2 / 2^20-1 = 1.90735045us
+  2^20-1/2^20-1 = 1 second
+
+
+so 25bits stores ~ 30 nanosecond granularity
+and 20bits stores ~ microsecond granularity
+*/
+
+/*
+dividing up directories by date:
+
+what gets expensive as file count grows?
+* any use of file globs
+* file open and delete times
+
+how many entries in a directory before the cost increase?
+* I could not find a cost calculation of any kind... too many variables?
+* anywhere around 10k-20k should be reasonable?
+
+time intervals for the base32, 7 character timestamp:
+
+6 = 1073741824 ~ 34.05 years
+5 = 33554432 ~ 1.1 years
+4 = 1048576 ~ 12.1 days
+3 = 32768 ~ 9.1 hours
+2 = 1024 ~ 17.1 min
+1 = 32 = 32 sec
+0 = 1 = 1 sec
+
+/base_dir/s/sssssss stores 34 year interval
+...
+/base_dir/sssssss/s stores 32 second intervals
+
+time intervals for the base32 5 character fractional timestamp:
+
+4 = 1048576 ~ 31.25ms
+3 = 32768 ~ 976.5us
+2 = 1024 ~ 30.5us
+1 = 32 = 953.7ns
+0 = 1 = 29.802323ns
+*/
+
 const base32map string = "0123456789abcdefghijklmnopqrstuv"
 
-// several functions for efficiently dividing data on disk by time
+var map32base = map[string]int8{
+	"0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+	"a": 10, "b": 11, "c": 12, "d": 13, "e": 14, "f": 15, "g": 16, "h": 17, "i": 18, "j": 19, "k": 20,
+	"l": 21, "m": 22, "n": 23, "o": 24, "p": 25, "q": 26, "r": 27, "s": 28, "t": 29, "u": 30, "v": 31,
+}
 
-// SortableStamp creates a base32 timestamp with one second resolution from 1970 ~ 32895.
-// sortable with `ls` and `sort`
-func SortableStamp(ti time.Time) string {
-	sec := uint64(ti.Unix())
-	bs := make([]byte, 8)
+// XXX make an interval struct that inherits from duration?????
+// test if times are in the given interval
+// test if intervals are in other intervals
+
+// Enc encodes the given integer (n) as a base32 string of length count.
+func Enc(n uint64, count int) string {
+	// force count >= 1
+	// compiler error if count is out of bounds for int
+	// if count is abnormally large, many zeros appear at the front of the encoded string
+	// if count is too small, then the high order bits of x are truncated
+	if count < 1 {
+		count = 1
+	}
+
+	// byte slice containing the encoded characters
+	bs := make([]byte, count)
 
 	// encode every 5 bits as a character in [0-9a-v]
-	for i := 7; i >= 0; i-- {
-		bs[i] = base32map[sec%32]
-		sec = sec >> 5
+	for i := (count - 1); i >= 0; i-- {
+		bs[i] = base32map[n%32]
+		n = n >> 5
 	}
 
 	return string(bs)
 }
 
-/*
-dividing up files by date
+// Dec restores the given string to a uint64.
+// error on bad characters
+func Dec(txt string) (uint64, error) {
 
-what gets expensive as file count grows?
-* any use of fileglobs
-* file open and delete times
+	// for each character in the string
+	// return 0 and error if it's a bad character
+	// turn the character back into an integer and append it back onto the uint64???
+	for c := range txt {
+		//i, ok := map32base[]
+		fmt.Println("c =", c)
+		// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	}
+	return uint64(5), nil
+}
 
-now many entries in a directory before the first slight cost increase???
-* anywhere around 10k-20k should be reasonable
+// Stamp1 creates a 7 character, fixed width, base32 timestamp covering 1970 ~ 3059 in seconds.
+func Stamp1(ti time.Time) string {
+	sec := uint64(ti.Unix())
+	return Enc(sec, 7)
+}
 
+// Read1 ???
 
+// Stamp2 creates a 5 character, fixed width, base32 timestamp covering 1 second in 30ns intervals.
+func Stamp2(ti time.Time) string {
+	nsec := uint64(ti.Nanosecond())
+	bs := make([]byte, 5)
 
+	// encode every 5 bits as a character in [0-9a-v]
+	for i := 4; i >= 0; i-- {
+		bs[i] = base32map[nsec%32]
+		nsec = nsec >> 5
+	}
 
-*/
+	return string(bs)
+}
+
+// XXX Read2 ???
 
 // allow a flexible specification that forces "reasonable" base10 buckets
 // return , ns, us, ms, s, 10s, and 5m string "buckets" from time.Now()
