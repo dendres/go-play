@@ -1,6 +1,7 @@
 package sbucket
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 	"strconv"
@@ -8,8 +9,39 @@ import (
 	"time"
 )
 
-// allow a flexible specification that forces "reasonable" base10 buckets
-// negative means fractional: 2 becomes 0.01 and 3 becomes 0.001 etc...
+const base32map string = "0123456789abcdefghijklmnopqrstuv"
+
+// several functions for efficiently dividing data on disk by time
+
+// SortableStamp creates a base32 timestamp with one second resolution from 1970 ~ 32895.
+// sortable with `ls` and `sort`
+func SortableStamp(ti time.Time) string {
+	sec := uint64(ti.Unix())
+	bs := make([]byte, 8)
+
+	// encode every 5 bits as a character in [0-9a-v]
+	for i := 7; i >= 0; i-- {
+		bs[i] = base32map[sec%32]
+		sec = sec >> 5
+	}
+
+	return string(bs)
+}
+
+/*
+dividing up files by date
+
+what gets expensive as file count grows?
+* any use of fileglobs
+* file open and delete times
+
+now many entries in a directory before the first slight cost increase???
+* anywhere around 10k-20k should be reasonable
+
+
+
+
+*/
 
 // allow a flexible specification that forces "reasonable" base10 buckets
 // return , ns, us, ms, s, 10s, and 5m string "buckets" from time.Now()
@@ -203,3 +235,6 @@ func Open(t *testing.T) {
 // buf := bytes.NewBuffer(b) // []byte
 // myfirstint, err := binary.ReadVarint(buf)
 // anotherint, err := binary.ReadVarint(buf)
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
