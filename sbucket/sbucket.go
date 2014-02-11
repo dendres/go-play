@@ -125,6 +125,10 @@ func Enc(n uint64, count int) (string, error) {
 // Dec restores the given string to a uint64.
 func Dec(txt string) (n uint64, err error) {
 	txt_length := len(txt)
+	if txt_length < 1 {
+		return n, fmt.Errorf("the null string has no corresponding integer")
+	}
+
 	if txt_length > 13 {
 		return n, fmt.Errorf("string = %s is %d characters too long to decode", txt, txt_length-13)
 	}

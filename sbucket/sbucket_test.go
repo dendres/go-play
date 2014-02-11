@@ -1,8 +1,14 @@
 package sbucket
 
 import (
+	"fmt"
 	"testing"
 )
+
+// A Case is any test case that can be run
+type Case interface {
+	Run(t *testing.T)
+}
 
 // EncDecCase represents a test case involving the Enc and Dec functions.
 // when the package name stops sucking, "EncDecCase" can become "Case" or "Test" or something like that
@@ -43,13 +49,84 @@ func (c EncDecCase) Run(t *testing.T) {
 	t.Log(c.Number, "encoded in", c.Count, "characters =", encoded, ", then decoded =", decoded)
 }
 
-// XXX run test cases that should fail during decode??????
+// EncErrorCase is a test case that passes when there is an encoding error.
+type EncErrorCase struct {
+	// the number to be encoded
+	Number uint64
 
-func TestEnc(t *testing.T) {
+	// how many characters to use to encode N
+	Count int
+
+	// the output expected during the error case
+	String string
+
+	// the error expected
+	Error error
+}
+
+// Run passes when Enc returns the expected output and error.
+func (c EncErrorCase) Run(t *testing.T) {
+	t.Log("encoding", c.Number, "in", c.Count, ". expecting output =", c.String, "and error =", c.Error)
+
+	s, e := Enc(c.Number, c.Count)
+	if s != c.String {
+		t.Fatal("Expected output =", c.String, ", but got output =", s)
+	}
+
+	if e.Error() != c.Error.Error() {
+		t.Fatal("Expected error =", c.Error.Error(), ", but got error =", e.Error())
+	}
+}
+
+// DecErrorCase is a test case that passes when there is a decoding error.
+type DecErrorCase struct {
+	// the input string to decode
+	String string
+
+	// the output expected during the error case
+	Number uint64
+
+	// the error expected
+	Error error
+}
+
+// RunF passes when Enc or Dec returns an error.
+// the output of Enc and Dec are ignored
+func (c DecErrorCase) Run(t *testing.T) {
+	t.Log("decoding", c.String, ". expecting output =", c.Number, "and error =", c.Error)
+
+	n, e := Dec(c.String)
+	if n != c.Number {
+		t.Fatal("Expected output =", c.Number, ", but got output =", n)
+	}
+
+	if e.Error() != c.Error.Error() {
+		t.Fatal("Expected error =", c.Error.Error(), ", but got error =", e.Error())
+	}
+}
+
+func TestEncDec(t *testing.T) {
 
 	uint64max := uint64(18446744073709551615)
 
-	cases := []EncDecCase{
+	cases := []Case{
+		// Enc bad input
+		EncErrorCase{0, 0, "", fmt.Errorf("error encoding n = 0. count = 0 is too small to encode")},
+		// EncErrorCase{0, 0, "0", fmt.Errorf("error encoding n = 0. count = 0 is too small to encode")},
+		// EncErrorCase{0, 0, "", fmt.Errorf("fake error message")},
+		EncErrorCase{0, 14, "", fmt.Errorf("error encoding n = 0. count = 14 would cause uint64 overflow during decoding")},
+		EncErrorCase{0, 9223372036854775807, "", fmt.Errorf("error encoding n = 0. count = 9223372036854775807 would cause uint64 overflow during decoding")},
+		// EncErrorCase{0, 9223372036854775808 2^63 overflows "int"??? looks like int64 to me!!!
+		EncErrorCase{0, -1, "", fmt.Errorf("error encoding n = 0. count = -1 is too small to encode")},
+		EncErrorCase{0, -9223372036854775808, "", fmt.Errorf("error encoding n = 0. count = -9223372036854775808 is too small to encode")},
+		// EncErrorCase{0, -9223372036854775809  (2^63)+1 overflows "int"???? looks like int64 to me!!!
+
+		// Dec bad input
+		DecErrorCase{"", 0, fmt.Errorf("the null string has no corresponding integer")},
+		DecErrorCase{"00000000000000", 0, fmt.Errorf("string = 00000000000000 is 1 characters too long to decode")},
+		DecErrorCase{"w", 0, fmt.Errorf("invalid rune 77 at offset 0 while decoding string w")},
+		DecErrorCase{"⌘", 0, fmt.Errorf("invalid rune 2318 at offset 0 while decoding string ⌘")},
+
 		// min N
 		EncDecCase{0, 1, "0", 0},
 		EncDecCase{0, 13, "0000000000000", 0},
@@ -68,12 +145,14 @@ func TestEnc(t *testing.T) {
 		EncDecCase{33, 2, "11", 33},
 
 		EncDecCase{999, 2, "v7", 999},
+		EncDecCase{999, 4, "00v7", 999},
+		EncDecCase{999, 1, "7", 7},
 
 		EncDecCase{1023, 3, "0vv", 1023},
 		EncDecCase{1024, 3, "100", 1024},
 		EncDecCase{1025, 3, "101", 1025},
 
-		// truncating 1
+		// padding 1
 		EncDecCase{1, 1, "1", 1},
 		EncDecCase{1, 2, "01", 1},
 		EncDecCase{1, 3, "001", 1},
@@ -102,17 +181,11 @@ func TestEnc(t *testing.T) {
 		EncDecCase{uint64max, 11, "vvvvvvvvvvv", uint64(36028797018963967)},
 		EncDecCase{uint64max, 12, "vvvvvvvvvvvv", uint64(1152921504606846975)}, // 32^2-1
 
-		// truncating non-zero and non-max numbers????
-
 	}
 
 	for _, c := range cases {
 		c.Run(t)
 	}
-
-	// make sure these cases are caught as errors
-	// EncDecCase{0, 15, "000000000000000", 0},
-
 }
 
 // func TestTenStamp(t *testing.T) {
