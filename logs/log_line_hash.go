@@ -42,6 +42,7 @@ How to divide up the directory tree so that there are less than 1k entries in ea
 
 
 best hash function for this purpose available in go?
+http://programmers.stackexchange.com/questions/49550/which-hashing-algorithm-is-best-for-uniqueness-and-speed
 https://github.com/spaolacci/murmur3
 https://github.com/reusee/mmh3
 http://golang.org/pkg/hash/crc32/
