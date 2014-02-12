@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/moovweb/rubex"
 	"log"
+	"time"
 )
 
 /*
@@ -31,18 +32,52 @@ The FindAllStringSubmatch-function will, for each match, return an array with th
 in the []byte, an entry will be "" if there is no match.
 
 */
+
+// type Event interface {} // some methods that all events must have
+
+// line is the original plain string with date stamp etc... removed.
+type Avent struct {
+	time  time.Time
+	shn   string // short hostname
+	level string // log level or syslog priority
+	app   string // overloaded = app_name || process_name || log_source || process_id
+	line  string // the actual log line
+}
+
+// is there something like to_s in golang??? where if I override it, the print format changes?
+func (a Avent) String() (out string) {
+	out += a.time.String()
+	// XXX finish making a readable way to print Avent
+	return
+}
+
+// an event where the line has been replaced with an encoded byte slice
+type Bvent struct {
+	time  time.Time
+	shn   string // short hostname
+	level string // log level or syslog priority
+	app   string // overloaded = app_name || process_name || log_source || process_id
+	enc   []byte // the tokenized, encoded log line
+}
+
 func main() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 	log.Println("start main")
+	format := "2006-01-02T15:04:05.000000-07:00"
 
 	test_string := `2014-01-30T00:30:01.246899+00:00,info,cron,CROND  (root) CMD (/usr/lib64/sa/sa1 1 1)`
 
-	re := rubex.MustCompile(`^(?<year>\d+)-(\d+)`)
-	matches := re.FindAllStringSubmatch(test_string, -1)
-	if matches == nil {
-		log.Println("no match or error with match????")
-	} else {
-		log.Println("found matches =", matches)
+	re := rubex.MustCompile(`^(\d+\-\d+\-\d+T\d+\:\d+\:\d+\.\d+\+\d+\:\d+),([^\,]+),([^\,]+),(.*)$`)
+	matches := re.FindAllStringSubmatch(test_string, -1) // [][]string
+	if matches != nil {
+		match := matches[0]
+		t, err := time.Parse(format, match[1])
+		if err == nil {
+			a := Avent{t, `fake-hostname`, match[2], match[3], match[4]}
+			log.Println("found match =", a)
+		} else {
+			log.Println("time parsing error =", err)
+		}
 	}
 
 	// FindAllStringSubmatch(s string, n int) [][]string
@@ -51,6 +86,12 @@ func main() {
 }
 
 /*
+
+
+    s := "2014-01-30T00:30:01.246899+00:00"
+    time.Parse(format, s)
+    fmt.Println(s)
+
 
 skip multiline for now:
 * start a multiline match when start_line_regex matches
