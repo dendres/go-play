@@ -67,7 +67,7 @@ buck: (holds the data)
 * per-tailer: receive, decrypt, decompress, write to buffered pub/sub channel
 * per-socket.io: pub/sub consume, filter (configured in browser) and broker to any connected socket.io
 * per-disk: pub/sub consume, filter not my disk, append (no fsync) buckets/disks/ti/me one serialized message per line
-* per-porter: receive bucket requests, block or refuse request if busy, send bucket to porter
+* per-porter: receive bucket requests, pack up messages from a bucket, return the bucket
 
 
 porter (pack up data and send to es and s3)

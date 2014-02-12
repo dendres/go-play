@@ -22,52 +22,6 @@ tailer:
 * clean disconnect and reconnect periodically
 
 
-starting with file tail input:
-* lines are appended to the file
-* the file may be rotated
-* the file may be a symlink pointing to another file that gets rotated
-* follow_name behavior = track the file by name
-* deduplicate messages
-
-network pattern:
-* single long tcp connection to one server, or multiple stateless UDP connections to multiple servers?
-* udp means max event size = (MTU - header_overhead) / compression_ratio = message size
-* udp is a mild pain for firewalls... stateful TCP is easier.
-* tcp max event size is limited by desired buffering characteristics (time and disk space)
-* simultaneous message to multiple servers seems expensive?  is it???
-  what about separate small and large buffer kafka topics?
-    basically double the space to catch a very small number of missing messages.
-* so far, buffer by min(time || disk space), compress, and send to a single kafka topic seems most efficient on network
-
-consider this network pattern:
-* long standing compressed, encrypted, tcp connections
-* tail, parse, serialize, MTU sized in-memory buffer and send to randomly chosen 2 of 3 distributed receiving servers
-* receiving process buckets by timestamp
-* receiving process writes to local buffer for log.io server
-* low latency receivers buffer and dedup messages
-* SPOF process reads all buckets one bucket ago, and sends to "recent"
-* SPOF process waits 48 hours, collects from all receivers and archives a bucket
-   all state is in s3 and bucket and local files on the 5 servers
-* SPOF process prunes remotes after 30 - 45 days
-
-
-benefits of multiple send:
-* message redundancy and distribution is decided at client
-* all SPOF processes are stateless and can be very easily configured to heartbeat and fail over.
-
-
-Error on the side of duplicate messages during file tailing race conditions!
-but make sure that duplicate_messages / total_messages < 1% and hopefully a lot less.
-kafka consumers can assume unique key of(time + checksum + hostname) for deduplication purposes
-
-
-go channel pub/sub ????
-* http://rogpeppe.wordpress.com/2009/12/01/concurrent-idioms-1-broadcasting-values-in-go-with-linked-channels/
-
-
-
-
-
 buffer to disk. why??
  - buffer to memory... cause disk swapping under pressure
  - buffer to disk and VFS cache uses memory when it is available
@@ -75,6 +29,8 @@ buffer to disk. why??
 disk buffer in single file or multiple files???
  - http://www.advancedlinuxprogramming.com/alp-folder/alp-apB-low-level-io.pdf
  - appending to a single file should be ok for now... get moving
+
+so buffer to disk, but let the OS decide when to fsync... treat it like an in-memory buffer managed by the OS
 
 
 case: start for the first time on a new server with files that have never been read
@@ -135,7 +91,9 @@ a separate goroutine processes the files:
 
 
 
-
+todo:
+* test inotify
+* rough out the tailing and state saving process and make test cases!
 
 
 
@@ -148,18 +106,17 @@ func main() {
 
 	file := "/var/log/harvest"
 
+	t, err := tail.TailFile(file, tail.Config{ReOpen: true, Follow: true})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for line := range t.Lines {
+		log.Println(line.Text)
+		// parse the lines.. see parsing.go
+	}
+
+	log.Println("waiting 90 seconds")
+	<-time.After(90 * time.Second)
+
 }
-
-// https://github.com/ActiveState/tail
-
-// t, err := tail.TailFile(file, tail.Config{ReOpen: true, Follow: true})
-// if err != nil {
-// 	log.Fatal(err)
-// }
-
-// for line := range t.Lines {
-// 	log.Println(line.Text)
-// }
-
-// log.Println("waiting 90 seconds")
-// <-time.After(90 * time.Second)
