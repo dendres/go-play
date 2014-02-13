@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bufio"
-	"io"
-	"log"
-	"os/exec"
+	"fmt"
+	"net"
+	"time"
 )
 
 /*
@@ -122,13 +121,26 @@ might want to pull out and convert to binary when tokenizing:
 then pull out "words" for the rest of the index:
 * [a-zA-Z0-9] 3 to ? characters in length... then downcase them! lossy, but OK!
 
+* remove big binary or number-ish things
+* remove all punctuation
+* anything left that is longer than 3 characters can be added to the index
+
+if an efficient "characters that make up multilingual words" character set can be constructed, then this might ok.
 
 
 lets get some stats about tokens to be encoded....
 
 
 
+XXX need a stemmed + downcased index for search + exact match index for compression
+* cool because it can quickly give the exact full term responses based on a stemmed search
 
+so... the data set then becomes:
+* document with terms replaced by term index
+* term index list
+* downcased, stemmed index with pointers to the term index
+  should be pretty small
+  made by parsing the index
 
 
 
@@ -162,13 +174,155 @@ http://stackoverflow.com/questions/11202058/unable-to-send-gob-data-over-tcp-in-
 * example
 
 
+*/
 
+const (
+	null_string     = ``
+	space_character = 0x20
+	dot_character   = 0x2E
+	colon_character = 0x3A
 
+	number_min = 0x30
+	number_max = 0x39
 
+	uppercase_min = 0x41
+	uppercase_max = 0x5a
 
+	uppercase_hex_max = 0x46
+
+	lowercase_min = 0x61
+	lowercase_max = 0x7a
+
+	lowercase_hex_max = 0x66
+)
+
+// token_character returns true if the rune is in [0-9a-zA-Z] and false otherwise.
+// should expand the character set to cover most words in most languages
+// guessing character frequencies: lowercase_letter_count > number_count > uppercase_letter_count
+func token_character(c rune) bool {
+	if c >= lowercase_min && c <= lowercase_max {
+		return true
+	} else if c >= number_min && c <= number_max {
+		return true
+	} else if c >= uppercase_min && c <= uppercase_max {
+		return true
+	}
+	return false
+}
+
+// hex_character returns true if the rune is one of [0-9a-fA-F] and false otherwise.
+func hex_character(c rune) bool {
+	if c >= number_min && c <= number_max {
+		return true
+	} else if c >= uppercase_min && c <= uppercase_hex_max {
+		return true
+	} else if c >= lowercase_min && c <= lowercase_hex_max {
+		return true
+	}
+	return false
+}
+
+// ip_character returns true if rune is one of [\.\:0-9a-fA-F] and false otherwise.
+func ip_character(c rune) bool {
+	if c == dot_character {
+		return true
+	} else if c == colon_character {
+		return true
+	}
+	return hex_character(c)
+}
+
+// Tokenize takes a channel of log lines and writes to a channel of terms
+// it never terminates ?????
+// XXX add a channel of all of the different types of numbers???? or one channel for all int like things????
+func Tokenize(lines <-chan string, words chan<- string, ips chan<- net.IP) {
+	var line, ip, word string
+	var c rune
+
+	for line = range lines {
+		for _, c = range line {
+
+			// XXXX not identifying IP address!!!!
+			if ip_character(c) {
+				ip += string(c)
+			} else {
+				if len(word) >= 2 { // rfc1924: 0 = "::"
+					if ip_object := net.ParseIP(ip); ip_object != nil {
+						ips <- ip_object
+					}
+
+				}
+				ip = null_string
+				continue
+			}
+
+			// check if it's a long hex string like 0xafffff or fffaaaa0000000045666544fffaaa ?????
+
+			if token_character(c) {
+				word += string(c)
+			} else {
+				if len(word) > 0 {
+					words <- word
+				}
+				word = null_string
+			}
+		}
+	}
+}
+
+func ShowStuff(words <-chan string, ips <-chan net.IP) {
+
+	fmt.Println("reading words")
+
+	for {
+		select {
+		case ip := <-ips:
+			fmt.Println("found an ip =", ip)
+		case word := <-words:
+			fmt.Println("found a word =", word)
+		}
+	}
+
+	fmt.Println("finished reading words")
+}
+
+func main() {
+	test_strings := []string{
+		"Received disconnect from 60.199.196.144: 11: Bye ⌘ Bye",
+		"DHCPREQUEST on eth0 to 172.31.0.1 port 67 (xid=0x21aeff47)",
+		"Anacron started on 2014-01-31",
+		"pam_unix(su-l:session): session opened for user root by done(uid=0)",
+	}
+
+	fmt.Println("making channels")
+	lines := make(chan string, 10)
+	words := make(chan string, 10)
+	ips := make(chan net.IP, 10)
+
+	fmt.Println("starting ShowWords")
+	go ShowStuff(words, ips)
+
+	fmt.Println("starting Tokenize")
+	go Tokenize(lines, words, ips)
+
+	for {
+		for _, s := range test_strings {
+			time.Sleep(1 * time.Second)
+			lines <- s
+		}
+	}
+
+	fmt.Println("finished main")
+}
+
+/*
+scanner := bufio.NewScanner(os.Stdin)
+for scanner.Scan() {
+    fmt.Println(scanner.Text())
+}
+
+if err := scanner.Err(); err != nil {
+    log.Fatal(err)
+}
 
 */
-func main() {
-	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	log.Println("start main")
-}
