@@ -32,8 +32,65 @@ Assumptions
 * ONLY the broker needs to be clustered and available
 
 
-Messaging and Data Pattern
-==========================
+Data Pattern
+============
+
+Event: one event to be logged (in-memory representation after parsing)
+
+* point uint64:   10^-8 since unix epoch loops in year 7819
+* shn   string:   short host name
+* app   string:   overloaded = app_name || process_name || process_id
+* line  string:   log line where time, shn, and app have been removed
+* words []string: list of word-like tokens from the log line
+* stems []string: list of stemmed search terms from the log line
+
+Message: message/tim/ee/ unsync'd buffers used to build a message. pruned after 2 message ack. server sends ack after writing Bucket
+
+* events.csv: base64(10^-8 since ti/me),shn,app,restore_original(line)... or can gob be re-opened and appended to???
+* incrementally build the token list????
+* incrementally build a b-tree of stemmed search terms
+
+
+
+Message wire format: capnp
+
+* list token strings
+* list of search terms
+* list Events with encoded(line) = []byte{bitset + terms}
+
+Bucket: buckets/ti/me/<files> time and term searchable data, pruned after 7 days
+
+* events.csv: base64(10^-8 since ti/me),shn,app,restore_original(line)
+* incrementally build the frequency tree using the received token index
+* incrementally build a b-tree of stemmed search terms
+
+are you sure there is no way to store the frequency tree of tokens such that:
+ - they get deduplicated
+ - once a node ID is created, it never changes... yes. this is not possible bec
+
+
+Static: static/ti/me/<files> created after mtime(bucket/ti/me) older than 48 hours
+
+* fast searchable file of lowercased and stemmed search terms??? maybe cdb???
+* list of token strings
+* list of Events
+
+Search: search/te/rm/sg/ohere
+
+* list of "Static" entries containing this term and a count of how many times
+
+
+
+
+
+log.io input format?
+
+
+Elasticasearch bulk insert format?
+
+
+Process and Message Pattern
+===========================
 
 * client: tail, parse, serialize, small in-memory buffer with fast timeout. send to multiple servers
 * server: receive, bucket and dedup on disk (let OS manage memory and decide when to fsync). small disk queue for low-latency consumers

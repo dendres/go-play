@@ -128,6 +128,7 @@ then pull out "words" for the rest of the index:
 if an efficient "characters that make up multilingual words" character set can be constructed, then this might ok.
 
 
+
 lets get some stats about tokens to be encoded....
 
 
@@ -174,7 +175,86 @@ http://stackoverflow.com/questions/11202058/unable-to-send-gob-data-over-tcp-in-
 * example
 
 
+
+lexing for tokens:
+
+ok... I got a number
+* could be an IP4... keep reading.. if it's between 0 and 255 followed by a dot, then keep going to see if it's an IP
+* could be hex... keep reading... if it's a series of hex characters followed by anything else, then it's a hex string
+* could be an integer keep reading.. if it's a bunch of numbers followed by punctuation or space, then it's a number
+* could be the start of some kind of other alphanum sequence... read till punctuation or space and emit as token
+
+ok... I got a letter
+* could be a hex... see if it's in the hex range
+* could be a natural language word... more letters till punctuation
+* could be ???
+
+ok... I got  - . _ / do I care about any of these????  maybe later
+
+
+go/token ??
+Pos and Token types
+
+http://golang.org/src/pkg/go/scanner/scanner.go
+isLetter
+isDigit
+digitVal
+scanNumber
+
+bufio.Scanner!!! http://jeremy.marzhillstudios.com/io/
+
+
+
+http://golang.org/pkg/text/scanner/
+
+l.accept()
+
+
+
+
+   var txt = `{key1 = "\"value1\"\n" | key2 = { key3 = 10 } | key4 = {key5 = { key6 = value6}}}`
+    var s scanner.Scanner
+    s.Init(strings.NewReader(txt))
+    var b []byte
+
+loop:
+    for {
+        switch tok := s.Scan(); tok {
+        case scanner.EOF:
+            break loop
+        case '|':
+            b = append(b, ',')
+        case '=':
+            b = append(b, ':')
+        case scanner.Ident:
+            b = append(b, strconv.Quote(s.TokenText())...)
+        default:
+            b = append(b, s.TokenText()...)
+        }
+    }
+
+    var m map[string]interface{}
+    err := json.Unmarshal(b, &m)
+    if err != nil {
+        // handle error
+    }
+
+    fmt.Printf("%#v\n",m)
+
+
+
+
+
+
+
+
+
+
+
+
+
 */
+
 
 const (
 	null_string     = ``
@@ -239,21 +319,30 @@ func Tokenize(lines <-chan string, words chan<- string, ips chan<- net.IP) {
 	var line, ip, word string
 	var c rune
 
+	ip_re := rubex.MustCompile(`\d+\.\d+\.\d+\.\d+`)
+
 	for line = range lines {
+
+		// remove the ip from line before looking for other tokens
+		re.ReplaceAllString(src, repl string) string
+
+
+
+
 		for _, c = range line {
 
 			// XXXX not identifying IP address!!!!
 			if ip_character(c) {
 				ip += string(c)
 			} else {
-				if len(word) >= 2 { // rfc1924: 0 = "::"
+				if len(ip) >= 2 { // rfc1924: 0 = "::"
 					if ip_object := net.ParseIP(ip); ip_object != nil {
 						ips <- ip_object
 					}
 
 				}
 				ip = null_string
-				continue
+				// continue
 			}
 
 			// check if it's a long hex string like 0xafffff or fffaaaa0000000045666544fffaaa ?????
@@ -308,6 +397,7 @@ func main() {
 	for {
 		for _, s := range test_strings {
 			time.Sleep(1 * time.Second)
+			fmt.Println("sending string =", s)
 			lines <- s
 		}
 	}
