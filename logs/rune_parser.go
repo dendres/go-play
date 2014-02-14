@@ -98,7 +98,35 @@ word
 
 file contains: ??????????????
 
+make token_id relative to the timestamp at the start of the bucket??????
+ map[token_string] -> []event_id
+ map[event_id] -> []token_string
 
+
+
+
+=================== getting the word tokens for compression and search ==================
+
+set limits on word size ????
+
+
+
+https://github.com/gyuholee/goling  bunch of language processing. extract numbers, segment
+
+segmenting, stemming etc...
+norvig probabilistic word segmenter: https://github.com/llimllib/segment
+another segmenter: https://github.com/gyuholee/goling/blob/master/segmentation.go
+
+n-gram based text categorization (guess language): http://godoc.org/github.com/pebbe/textcat
+
+
+=========== performing search ======
+http://swtch.com/~rsc/regexp/regexp4.html
+https://code.google.com/p/codesearch/source/browse/index/read.go
+
+given regex(/Google.*Search/), produce query of 3-grams => Goo AND oog AND ogl AND gle AND Sea AND ear AND arc AND rch
+
+build a probabilistic autocomplete based on 3-grams or other??????
 
 
 */

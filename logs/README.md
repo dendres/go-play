@@ -20,8 +20,8 @@ Interfaces
 Provide 3 interfaces to access log messages:
 
 * log.io "starting now": lossy. collect events only after the browser app is loaded
-* kibana "recent": index data from M min ago through the last D days
-* kibana "history": tmp_index = load_index(start_time, end_time). tmp_index expires after E hours/days.
+* "recent": index data from M min ago through the last D days
+* "history": tmp_index = load_index(start_time, end_time). tmp_index expires after E hours/days.
 
 
 Assumptions
@@ -42,45 +42,36 @@ Event: one event to be logged (in-memory representation after parsing)
 * app   string:   overloaded = app_name || process_name || process_id
 * line  string:   log line where time, shn, and app have been removed
 * words []string: list of word-like tokens from the log line
-* stems []string: list of stemmed search terms from the log line
 
-Message: message/tim/ee/ unsync'd buffers used to build a message. pruned after 2 message ack. server sends ack after writing Bucket
+Serialized Event format:
 
-* events.csv: base64(10^-8 since ti/me),shn,app,restore_original(line)... or can gob be re-opened and appended to???
-* incrementally build the token list????
-* incrementally build a b-tree of stemmed search terms
+* max size: optimize for 80 characters, but allow around 200k or so. rsyslog = 64k, java stack trace > 100k
+* 3 byte count of bytes (max of 16MB) to follow
+* gzip(gob or capnp)
+* no extra crc needed. crc32 = gzip_byte_slice[-8:-5]
 
+Tailer: accumulate events into time buckets
 
+* buckets/ti/me.events
+* binary file with messages. append-only format. each message has length and checksum. read by offset.
+* when it's time to send, copy the whole file to the network as-is.
 
-Message wire format: capnp
+Buck: deduplicate events and accumulate frequency and search tables
 
-* list token strings
-* list of search terms
-* list Events with encoded(line) = []byte{bitset + terms}
-
-Bucket: buckets/ti/me/<files> time and term searchable data, pruned after 7 days
-
-* events.csv: base64(10^-8 since ti/me),shn,app,restore_original(line)
-* incrementally build the frequency tree using the received token index
-* incrementally build a b-tree of stemmed search terms
-
-are you sure there is no way to store the frequency tree of tokens such that:
- - they get deduplicated
- - once a node ID is created, it never changes... yes. this is not possible bec
-
+* buckets/ti/me is the base directory to work on the given time slice
+* buckets/ti/me/st/amp/shn/crc32.msg store deduplicated messages in a tree in uncompressed gob or capn
+* buckets/ti/me/word_frequency.tree some database like structure used to count the frequency of all words
+* buckets/ti/me/index.tree some tree structure index of stemmed or n-gram search terms
 
 Static: static/ti/me/<files> created after mtime(bucket/ti/me) older than 48 hours
 
-* fast searchable file of lowercased and stemmed search terms??? maybe cdb???
-* list of token strings
-* list of Events
+* highly compressed single file of all messages
+* static DB of token strings used in pre-compression in some searchable format????
+* static DB of stemmed or n-gram search terms????
 
-Search: search/te/rm/sg/ohere
-
-* list of "Static" entries containing this term and a count of how many times
-
-
-
+All:
+* constantly updating searchable index of exact terms -> list of ti/me + count
+* constantly updating searchable index stemmed or n-gram search terms -> list of ti/me + count
 
 
 log.io input format?
@@ -92,7 +83,7 @@ Elasticasearch bulk insert format?
 Process and Message Pattern
 ===========================
 
-* client: tail, parse, serialize, small in-memory buffer with fast timeout. send to multiple servers
+* client: tail, parse, serialize, send on N frequencies to M servers
 * server: receive, bucket and dedup on disk (let OS manage memory and decide when to fsync). small disk queue for low-latency consumers
 * SPOF "recent" process reads all buckets one bucket ago, and sends to 30 day elasticsearch. prunes elasticsearch
 * SPOF "history" process waits 48 hours, collects from all receivers and archives a bucket to S3
@@ -107,16 +98,16 @@ Services
 tailer:
 
 * runs on every server that produces log and metric events
-* buffering happens ONLY in the tailed files and in memory.
-* tail files by buffered inotify and record state on disk (fsync) after each block is sent on the network
-* state/path/to/file. mtime = stat. 16 character, zero padded base10 offset in file + 64 characters of last line read from the file
-* up to the entire content of the file may be processed if the file is rotated
-* low latency between inotify and in-memory buffer should prevent loss of the last messages before rotate.
-* add any missing fields (hostname, process/service etc.., timestamp, some kind of message id )
-* remove any duplicate fields
-* keep a long-standing compressed and encrypted messaging channel to multiple servers.
-* sleep and retry on server disconnect or error in compression, encryption, or tcp.
-* clean disconnect and reconnect periodically
+* poll log files and track offset
+* if the offset is after EOF, find the most recent archive and read any lines after offset. reset offset to 0 and continue polling
+* parse Event: pull out time, hostname, and the name of the sending application
+* language analyze Event: separate interesting words from punctuation
+* keep open connections to all servers. reconnect on timeout
+* when 1 packet worth of events is available, pick 1 random server and send
+* time bucket events to disk
+* when a time bucket boundary passes, pick a random server and send the whole bucket
+* prune buckets on time and size limit
+* when pruning: pick a random server and send the whole bucket, then delete from local disk.
 
 
 buck: (holds the data)

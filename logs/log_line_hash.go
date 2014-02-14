@@ -47,6 +47,8 @@ https://github.com/spaolacci/murmur3
 https://github.com/reusee/mmh3
 http://golang.org/pkg/hash/crc32/
 
+https://github.com/dgryski/dgohash
+
 
 */
 func main() {
