@@ -62,17 +62,13 @@ Tailer:
 * buckets/tim/es.b: flat file: append events: 3 byte fixed Event length + data
 
 Buck:
-
-
-
-
-
-
-
-
-All:
-* constantly updating searchable index of exact terms -> list of ti/me + count
-* constantly updating searchable index stemmed or n-gram search terms -> list of ti/me + count
+* events.kv[event_key] = event bytes directly off wire
+* tokens.kv[token_string] = []event_key
+* 3gram.kv[3gram] = []token
+* tokens.b is a gzip(listB(2,6)) created during freeze, sorted by frequency, used ONLY for compression
+* static.kv[event_key] = gzip(events with "line" tokenized by tokens.b)
+* global/all_3gram.kv[3gram] = []tim/es
+* global/all_tokens.kv[token_string] = []tim/es
 
 
 log.io input format?
@@ -84,13 +80,11 @@ Elasticasearch bulk insert format?
 Process and Message Pattern
 ===========================
 
-* client: tail, parse, serialize, send on N frequencies to M servers
-* server: receive, bucket and dedup on disk (let OS manage memory and decide when to fsync). small disk queue for low-latency consumers
-* SPOF "recent" process reads all buckets one bucket ago, and sends to 30 day elasticsearch. prunes elasticsearch
-* SPOF "history" process waits 48 hours, collects from all receivers and archives a bucket to S3
-* SPOF process prunes remotes after 30 - 45 days
-* non-clustered elasticsearch behind loadbalancer with health check.
-* webui to load history into separate elasticsearch
+* tailer: tail, parse, serialize, and send messages on I time intervals to S servers
+* buck: receive events, pub/sub events, answer queries
+* porter: query buck and offline data to s3
+* web UI for static search by time, 3gram, term
+* pub/sub buck interface for nagios and graphite
 
 
 Services
@@ -100,20 +94,20 @@ tailer:
 
 * runs on every server that produces log and metric events
 * poll log files and track offset
-* if the offset is after EOF, find the most recent archive and read any lines after offset. reset offset to 0 and continue polling
+* if offset after EOF, find the most recent archive and read any lines after offset. reset offset to 0 and continue polling
 * parse Event: pull out time, hostname, and the name of the sending application
 * language analyze Event: separate interesting words from punctuation
 * keep open connections to all servers. reconnect on timeout
-* when 1 packet worth of events is available, pick 1 random server and send
+* for each packet worth of events, pick 2 random servers and send the message
 * time bucket events to disk
-* when a time bucket boundary passes, pick a random server and send the whole bucket
+* when a time bucket boundary passes, sleep random, pick a random server and send the entire file as is
 * prune buckets on time and size limit
 * when pruning: pick a random server and send the whole bucket, then delete from local disk.
 
+buck:
 
-buck: (holds the data)
-
-* per-tailer: receive, decrypt, decompress, write to buffered pub/sub channel
+* per-tailer: receive, write to buffered pub/sub channel
+* pub/sub channel listener parses and sends on another pub/sub channel
 * per-socket.io: pub/sub consume, filter (configured in browser) and broker to any connected socket.io
 * per-disk: pub/sub consume, filter not my disk, append (no fsync) buckets/disks/ti/me one serialized message per line
 * per-porter: receive bucket requests, pack up messages from a bucket, return the bucket
@@ -148,12 +142,24 @@ incident recovery tools:
 Stage 1
 =======
 
-* all_syslog_file -> tailer -> buck -> disk buckets
+prove technology:
+* tail file
+* parse log lines
+* extract tokens from line
+* serialize message
+* zlib compress
+* tcp connection handling and health
+* NaCL encryption
+* pub/sub channel
+* listB
+* pick kv
+* ?????????
 
 
 Stage 2
 =======
 
+* all_syslog_file -> tailer -> buck -> disk buckets
 * porter -> recent_es <- kibana "recent"
 
 
