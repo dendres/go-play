@@ -8,14 +8,7 @@ import (
 )
 
 /*
-single kafka partition reading goroutine.
-single consumer_group for all partitions (queue balance messages across consumers)
-buck.Listen(topic, partition_number)
-* determine if data is missing and the offset needs a rewind ??????
-* decompress and separate kafkamessages into events
-* for each event, parseonly the timestamp!
-* if-e processed/<topic>/<5mstamp>, write the message to recovered/<topic>/etc...
-* write compressed event to ephemeral disk: buckets/<topic>/<5mstamp>/<us_stamp>/<small_checksum>
+goroutine to handle incoming messages from tailer
 */
 func Listen() {
 }
@@ -57,21 +50,85 @@ func s3_send() {
 }
 
 /*
-buck:
+Buck:
+
+receive Tailer "Events"
+
+build a multi-level index:
+3gram(h_e) -> []token
+token(hello) -> []event_key
+event(event_key) -> event
+
+and respond to requests for bulk event movement:
+events(start_time, end_time) -> []bucket_path
+
+event_key: 16 bytes
+* how many bits of "point" are needed inside directory?
+  32^2 = 1024 seconds = the lowest 10 bits
+  fractional time = number of 10^-8 intervals since the second began.
+  10^8, 10ns intervals = 1 second
+  1 second or 10^8 10ns intervals fit in 27 bits
+  need 10 bits for 1024 seconds
+  so 10 second bits + 27 fractional bits = 37 bits
+  which is contained by... 5 bytes.
+* 4 bytes of crc32
+* 3 bytes of shn[1:3]
+* 4 bytes of app[0:3]
+* 5 + 4 + 3 + 4 = 16 byte
+
+message_count_max:
+* how many unique words from all servers in 17.1 minutes?
+* currently 6M events/hour/75servers ~ 22 events/second/server
+* target rate is 1K events/second/server * 10K servers = 10M events/second
+* indexes should not prevent ~ 10B events per bucket
+
+token_count_max:
+* 10B events... how many words in 17min from 1k servers ???
+* worst case every message has a new sha256 and we save the whole thing
+* 6 byte count allows 2^48 tokens / 256 bytes/token ~ 1T events
+
+buckets/tim/es:
+* 32768, 12.1 day directories / 1024, 17.1 minute buckets
+
+
+Data updated for every incoming message:
+
+events.kv:
+* key = event_key
+* value = event bytes directly off wire
+
+tokens.kv:
+* key = token_string
+* value = []event_key
+
+3gram.kv:
+* key = 3gram
+* value = []token
+
+Data updated during "freeze" D days after tim/es
+
+tokens.b:
+* listB(6,8)
+* tokens sorted by frequency
+* created during freeze
+
+static.kv:
+* key = event_key
+* value = events with "tokens" removed and "line" tokenized using static_token.list
+
+global/all_3gram.kv
+* key = 3gram
+* value = []tim/es
+
+global/all_tokens.kv
+* key = token_string
+* value = []tim/es
+
+
+
 
 * bucket messages onto local ephemeral filesystem then compress and archive to s3
-* a SPOF server that can be offline for up to 2 days with minimal impact
-* after 48 hours process the oldest buckets
-* sort, bz2, send to s3
 
-configure topic = t-<environment_name>
-configure buckets_folder = /data/buck/buckets
-configure recovered_folder = /data/buck/recovered
-configure upload_goroutine_count = 3
-
-consume ALL 15 partitions. one goroutine each
-
-5mstamp: "find" and "ls" must sort time correctly for this sortable base36 timestamp representing a 5min boundary
 */
 func main() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)

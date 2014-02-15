@@ -68,17 +68,101 @@ bitset read bit:
   return bool
 
 
-=========== full serialized format =============
 
-Message:
-* the array of token strings
+======= listA =======
+
+properties:
+* a list of 256 x 32 byte values stored in binary serialization as []byte
+* data overhead = only a fixed few bytes overhead to keep the total length.
+* single seek to get a value
+* single seek to write a value
+* length limits established at init.
+* id is a variable number of bytes
+* does NOT deduplicate
+* ordered by insert order ONLY. no sorting.
+
+format:
+* type(bytes_in_size):
+* bytes_in_size total size of the list + big long unicode string
+* id: 5 bit length + varint offset from:
+   id 0 of length 3 should fit in 1 byte!
+
+  00000 000  00000000
+        0 always
+  00000  11 = first 3 tokens in 1 byte
+
+if there was a better way to encode the length, then the first 128 tokens fit in 1 byte????
+
+methods:
+* split_id(id []byte) length, offset:
+  uint64 = varint(id)
+* Read(id): offset, length = split_id(id), seek to offset, read length
+* Append(string) = seek to size, write string, size += len(string)
+
+================= listB ====================
+
+must hold the worst case 2K tokens found in a 64KB message
+
+some notes from looking at Event serialization:
+* Empty serialized event = 1 8 1 1 4 4 4 = 23 bytes
+* 1 unencoded character event: 1 8 1 4 1 12 4 1 4 0 4 2 ~ 42 bytes
+* worst_case_uncompressed= 32 header + marks 2^13 + tokens 2^16 +line 2^16 ~ 136K
+* normally, as tokens gets larger, marks and lineget smaller. marks getsslower 1/8 speed
+
+
+
+from: http://www.zehnet.de/2005/02/12/unicode-utf-8-tutorial/
+"The bytes 0xFE (11111110) and 0xFF (11111111) are never used in the UTF-8 encoding."
+
+validated: http://en.wikipedia.org/wiki/UTF-8
+"The bytes 0xFE and 0xFF do not appear, so a valid UTF-8 stream never matches the UTF-16 byte order mark and thus cannot be confused with it. The absence of 0xFF (0377) also eliminates the need to escape this byte in Telnet (and FTP control connection)."
+
+properties:
+* []byte up to 64KB of up to 256 Byte 0xFF separated unicode strings
+* 2 byte length
+* id = varint offset from the beginning of the []byte
+* data overhead = 2 byte + 1 byte/item
+
+id properties of varint:
+0000000 = 0
+0111111 = 127
+1000001 00000000 -> 000000 10000000 -> 128
+1000001 01111111 -> 000000 11111111 -> 255
+1111111 01111111 -> 111111 11111111 -> 16383
+1000001 10000000 00000000 -> 1000000 00000000 -> 16384
+so id's 0 to 127 are 1 byte
+and id's 128 to 16383 are 2 byte
+
+methods:
+* Init(x,y): length = 0, the empty []byte
+  x = fixed number of bytes used to store length
+  y = fixed max length of each item = 2^y bytes
+* Append(string):
+  error if len(string) > 256 Bytes
+  read length
+  new_length = length + len(string) + 1
+  error if new_length >= 4GB
+  set id = length, seek to length, write string, write 0xFF
+  length = new_length
+  return id
+* Read(id):
+  error if id >= 4GB
+  seek to offset = id
+  read bytes till 0xFF
+  return string
+
+
+=========== full "line" serialized format =============
+
+* bitset mark encoding for each byte.
+* listB of tokens
+
+
+
+
+
+
 * the array of Events
-
-Event:
-* point uint64: 10^-8 since unix epoch loops in year 7819
-* shn string:   short host name
-* app string:   overloaded = app_name || process_name || process_id
-* line []byte:  encoded line with app, shn, and point decoded
 
 
 XXXX do this and test!!!

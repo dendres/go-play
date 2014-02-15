@@ -35,39 +35,40 @@ Assumptions
 Data Pattern
 ============
 
-Event: one event to be logged (in-memory representation after parsing)
+Event:
+* version uint8:   encoding version
+* point uint64:    10^-8 since unix epoch loops in year 7819
+* crc   uint32:    crc32 checksum of "line" as it should appear in the browser
+* shn   string:    short host name
+* app   string:    overloaded = app_name || process_name || process_id
+* marks bitset:    a bitset indicating which characters in "line" should be replaced with tokens
+* tokens []string: list of word-like tokens from the log line
+* line  string:    log line where time, shn, and app have been removed
+* l     string:    the encoded string
 
-* point uint64:   10^-8 since unix epoch loops in year 7819
-* shn   string:   short host name
-* app   string:   overloaded = app_name || process_name || process_id
-* line  string:   log line where time, shn, and app have been removed
-* words []string: list of word-like tokens from the log line
+Serialized Event:
 
-Serialized Event format:
+* version: 1 byte fixed
+* point  : 8 bytes fixed
+* crc    : 4 bytes fixed
+* shn    : 1 byte length + data
+* app    : 1 byte length + data
+* marks  : 2 byte length + data
+* tokens : 2 byte length + data
+* line   : 2 byte length + data
 
-* max size: optimize for 80 characters, but allow around 200k or so. rsyslog = 64k, java stack trace > 100k
-* 3 byte count of bytes (max of 16MB) to follow
-* gzip(gob or capnp)
-* no extra crc needed. crc32 = gzip_byte_slice[-8:-5]
+Tailer:
 
-Tailer: accumulate events into time buckets
+* buckets/tim/es.b: flat file: append events: 3 byte fixed Event length + data
 
-* buckets/ti/me.events
-* binary file with messages. append-only format. each message has length and checksum. read by offset.
-* when it's time to send, copy the whole file to the network as-is.
+Buck:
 
-Buck: deduplicate events and accumulate frequency and search tables
 
-* buckets/ti/me is the base directory to work on the given time slice
-* buckets/ti/me/st/amp/shn/crc32.msg store deduplicated messages in a tree in uncompressed gob or capn
-* buckets/ti/me/word_frequency.tree some database like structure used to count the frequency of all words
-* buckets/ti/me/index.tree some tree structure index of stemmed or n-gram search terms
 
-Static: static/ti/me/<files> created after mtime(bucket/ti/me) older than 48 hours
 
-* highly compressed single file of all messages
-* static DB of token strings used in pre-compression in some searchable format????
-* static DB of stemmed or n-gram search terms????
+
+
+
 
 All:
 * constantly updating searchable index of exact terms -> list of ti/me + count
