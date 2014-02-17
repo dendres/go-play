@@ -62,26 +62,29 @@ event(event_key) -> event
 and respond to requests for bulk event movement:
 events(start_time, end_time) -> []bucket_path
 
-message_count_max:
-* how many unique events total from all servers in 17.1 minutes?
+event_rate_target:
+* average events from all servers in one second?
 * currently 6M events/hour/75servers ~ 22 events/second/server
-* target rate is 1K events/second/server * 10K servers = 10M events/second
-* 10M events / second * 1024 seconds (17.1 minutes) ~ 10B events
-* all indexing and hashing methods MUST allow 10B events per bucket
-* 10M events/second = 10^7 events every 10^9 ns = 1 event every 100ns
+* target rate is 500 events/second/server * 1K servers = 500K events/second
+* 500K events/second = 500 events/ms = 0.5 events/us
+* 500K * 512 byte events/second = 244MB/second = 20TB/day
+
+bucket_event_count and storage size:
+* 500K events / second * 1024 seconds ~ 512M events/bucket
+* and around 244MB/second * 1024 seconds ~ 244GB/bucket means 2 buckets per ec2 disk
+* should be possible to handle the indexing for 512M event id's per bucket... right???
+* assuming massive compression is possible...
 
 event_key:
 * how many bits of "point" are needed inside directory?
-  32^2 = 1024 seconds = the lowest 10 bits
+  32^2 = 1024 seconds = 2^10 = the lowest 10 bits
   fractional time = number of 10^-8 second (10ns) intervals since the second began.
   10^8, 10ns intervals = 1 second
   1 second or 10^8 10ns intervals fit in 27 bits
-  need 10 bits for 1024 seconds
-  so 10 bits for seconds + 27 bits for fractional seconds = 37 bits for "point"
-  which gets rounded up to 40 bits or 5 bytes.
+  so... 10 bits for seconds + 27 bits for fractional seconds = 37 bits for "point" inside bucket
 
 * probability of collision using time stamp alone?
-  this is less messages than the granularity of Event.point = 10ns intervals
+  this is less events than the granularity of Event.point = 10ns intervals
   calculate the probability of 2 messages at the same time????
     NTP cloud time accuracy ~ 10^-3 or 1ms
      every 1 ms can contain 10^5 * 10^-8 intervals or ~ 17 bits worth
@@ -89,49 +92,108 @@ event_key:
       20 bits can be considered collision free, but 17 bits must be considered like a random hash
 
 * so how much extra entropy is required to avoid message collision in a "bucket"??
-  total number of messages in 1ms = 10^7 events/second * 10^-3 seconds/ms = 10^4 events/ms
-  bits of entropy required to avoid collision in 10^4 events => max number of ((10^4)^3)/2 fits in ~ 39 bits
+  total number of messages in 1ms = 5*10^5 events/second * 10^-3 seconds/ms = 500 events/ms
+  bits of entropy required to avoid collision in 500 events:
+    ((500)^3)/2 fits in ~ 26 bits
+  we've got 17 bits already and need a total of 26. find 9 bits somewhere or risk it?
+  XXXX I'm considering dropping the granularity of the timestamp in favor of checksum
+    how many bits of timestamp in bucket for ms granularity?
+      1 second or 10^3 ms fits in 2^10 or 10 bits
+      so... 10bits for seconds + 10 bits for fractional seconds + 26 bits entropy = 46 bits required
+      how to divide up the 6 bytes?  3 time + 3 checksum should be ok
 
-* we've got 17 bits already and need a total of 39, so a 22 bit hash function would be perfect
-  a crc32 is overkill by 10 bits, so 3 or 4 bytes of crc should be ok
-  rounding up to the full crc32 for now for the added benefit of having it available
-
-* the bucket event key will be 5 + 4 = 9 bytes long
-
-
-token_count_max:
-* 10B events... how many words in 17min from 1k servers ???
-* worst case every message has a new sha256 and we save the whole thing
-* 6 byte count allows 2^48 tokens / 256 bytes/token ~ 1T events
-
-buckets/tim/es:
-* 32768, 12.1 day directories / 1024, 17.1 minute buckets
+* roughing out indexing with a 6 byte event key.
 
 
 Data updated for every incoming event:
 
 events.kv:
-* deduplicates incoming events
+* index should test existence in ~ 2 disk seeks
+* events should be expected to arrive out of order
 * key = event_key
 * value = event bytes directly off wire
-
-need a better on-disk deduplicating data structure in a single file??????
 * file operations:
   ReadAt(b []byte, off int64) = pread(2)
   WriteAt(b []byte, off int64) = pwrite(2)
   Truncate(size int64) = syscall.Ftruncate ?????
-* more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/vfs.txt
-
-* not sure how sparse files get treated in vfs cache... don't want a bunch of zeros in memory!!!!
-  probably avoid sparse files for now?????
-
-* O(1) key lookup????
-* append the key and value to the end of the file if it does not exist??????
-
-* could do sparse file where key = offset????
+  more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/vfs.txt
+* sparse event_id list would be 2^48 bits or 32 TB. larger than FS file size limit.
 
 
+thought experiment for rough tree structure:
+first 16 blocks are first layer index:
+256x256 matrix of pointers to all combinations of the first 2 bytes.
 
+read:
+* seek to the first 2 bytes i1. read 3 bytes i2.
+* seek from beginning to i2. read 6 bytes i3.
+* if i3 == event_id, then it's alreay here
+
+????????????????????
+
+
+
+
+
+
+
+
+
+4GB bloom filter for every 244GB
+
+4GB bloom filter as 4,4
+m = 2^32 bits in the bloom filter array
+k = 2 hash functions
+n = 5*10^8 events
+
+( 1 - 2.71828^(-2 * (5*10^8) / (2^32)) )^2 = 4% chance of false positive is still too high
+
+
+
+maybe take the 9 bytes, base32 encode them, abc/def/
+15 characters
+
+
+
+
+
+
+
+how big is a prefix tree of all possible 9 byte id's ???
+
+
+
+break messages up into even sized blocks for fixed offset file storage
+
+
+sparse bit array: 2^(9*8) bits long. seek to the 9byte address and set 1 or 0
+
+
+
+
+* bisection or binary search of a linear list. fibonaccian search: same, but no division
+
+
+
+
+
+binary tree of fixed width keys:
+key,left,right    where left and right are other keys
+
+reading:
+* read root key and decide next_key = left or right
+* seek to and read next_key and repeat till ????
+
+prefix-tree is also a good fit for autocompleting dictionary
+
+
+
+
+bloom_filter_false_positive_rate = ( 1 - 2.71828^(-kn/m) )^k
+
+
+buckets/tim/es:
+* 32768, 12.1 day directories / 1024, 17.1 minute buckets
 
 tokens.kv:
 * deduplicates incoming events
