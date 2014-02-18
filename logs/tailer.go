@@ -39,6 +39,18 @@ telling rsyslog to output useful fields:
 */
 
 /*
+
+sending to all servers, 1 server, or some fraction:
+http://en.wikipedia.org/wiki/Rendezvous_hashing
+  server_weights = h(server1_id + object_id), h(server2_id + object_id), h(server3_id + object_id)
+  pick the largest weight and send to that server.
+  query computing the same weights
+
+
+
+
+
+
 kafka topic = t-<environment_name>
 * a single topic name for all events
 * prefix for the project to avoid conflicts with other projects. a single letter and dash should be sufficient.
