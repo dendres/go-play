@@ -22,8 +22,8 @@ type SetGetCase struct {
 }
 
 func newTestBita(t *testing.T) *Bita {
-	stamp := time.Now().Unix()
-	path := base_path + "/" + strconv.FormatInt(stamp, 10)
+	stamp := time.Now().Nanosecond()
+	path := base_path + "/" + strconv.Itoa(stamp)
 	t.Log("new test path =", path)
 
 	b, err := Open(path)
@@ -68,9 +68,8 @@ type FileSizeCase struct {
 	data []int64
 
 	// expected output of Stat following the inserts
-	size    int64
-	blksize int64
-	blocks  int64
+	size   int64 // total file size in bytes
+	blocks int64 // number of 512 byte blocks
 }
 
 func (c FileSizeCase) Run(t *testing.T) {
@@ -92,13 +91,13 @@ func (c FileSizeCase) Run(t *testing.T) {
 		t.Fatal("error from syscall.Stat:", err)
 	}
 	t.Log("After Size =", stat.Size)
-	t.Log("Blksize =", stat.Blksize)
 	t.Log("Blocks =", stat.Blocks)
 
-	expected := c.blksize * c.blocks
-	actual := stat.Blksize * stat.Blocks
-	if actual > expected {
-		t.Fatal("actual =", actual, "> expected =", expected)
+	if stat.Size > c.size {
+		t.Fatal("file is too large:", stat.Size, ">", c.size)
+	}
+	if stat.Blocks > c.blocks {
+		t.Fatal("too many 512 byte blocks:", stat.Blocks, ">", c.blocks)
 	}
 }
 
@@ -117,13 +116,38 @@ func TestAll(t *testing.T) {
 
 	// int64max := int64(9223372036854775807)
 	//gb128 := int64(99999999999999)
-	tb15 := int64(140500000000000) // 15T not taking the time to find exact largest number without error.. in theory 16T
-	tb7 := int64(70250000000000)
+
+	// tb15 := int64(140500000000000)
+	// tb7 := int64(70250000000000)
+
 	cases := []Case{
 		SetGetCase{[]int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}},
 		SetGetCase{[]int64{11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}},
-		FileSizeCase{[]int64{tb15, 0}, 17179869185, 4096, 16},
-		FileSizeCase{[]int64{0, tb7, tb15}, 17179869185, 4096, 24},
+
+		FileSizeCase{[]int64{0}, 1, 8}, // 1 byte long file, 8 512 byte blocks = 1 4096 byte filesystem block
+		FileSizeCase{[]int64{7}, 1, 8},
+		FileSizeCase{[]int64{0, 7}, 1, 8},
+		FileSizeCase{[]int64{0, 1, 2, 3, 4, 5, 6, 7}, 1, 8},
+
+		FileSizeCase{[]int64{8}, 2, 8},
+		FileSizeCase{[]int64{9}, 2, 8},
+
+		// write a 1KB sparse file
+		FileSizeCase{[]int64{8183}, 1023, 8}, // 8*(2^10 -1) -1
+		FileSizeCase{[]int64{8184}, 1024, 8}, // 8*(2^10 -1)
+		FileSizeCase{[]int64{8191}, 1024, 8}, // 8*(2^10) -1
+		FileSizeCase{[]int64{8192}, 1025, 8}, // 8*(2^10)
+
+		// 1MB sparse file
+		FileSizeCase{[]int64{8388607}, 1048576, 8}, // 8*(2^17) -1 gives a file sized 2^17
+
+		// 1GB sparse file
+		FileSizeCase{[]int64{8589934591}, 1073741824, 8}, // 8*(2^30) -1 gives a file sized 2^30
+
+		// 8TB sparse file
+		FileSizeCase{[]int64{70368744177663}, 8796093022208, 8}, // 8*(2^43) -1 gives a file sized 2^43
+
+		// largest bit in 16T should be 8*(2^44)-1, but this errored out
 	}
 
 	for _, c := range cases {
@@ -171,17 +195,22 @@ func BenchmarkRandomSmallSet(b *testing.B) {
 	}
 }
 
-// empty m1.large: 200000, 10300 ns/op
-func BenchmarkRandomSet(b *testing.B) {
+// empty m1.large: 100000     15148 ns/op
+func BenchmarkRandomSetGet(b *testing.B) {
 	ba := newBenchBita(b)
 	b32 := int64(1 << 32)
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		value := rand.Int63n(b32)
-		if err := ba.Set(value); err != nil {
-			b.Fatal("Error Setting index =", i, ", err =", err)
+		value1 := rand.Int63n(b32)
+		value2 := rand.Int63n(b32)
+
+		if err := ba.Set(value1); err != nil {
+			b.Fatal("Error Setting index =", value1, ", err =", err)
+		}
+		if _, err := ba.Get(value2); err != nil {
+			b.Fatal("Error Getting index =", value2, ", err =", err)
 		}
 	}
 }
