@@ -56,9 +56,76 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 */
 
 /*
+splitting tree on FS:
+ideal time = 35 bit second + 30 bit ns. can reduce fractional second granularity
+60 bit fits in 12 lp32 characters
+65 bit fits in 13
+32 bit of crc ~ 6 characters
+number of files in 3 characters = 32^3 = 32768
+can't list in these directories!
+shield them from mlocate
+any other system processes to wory about???
+
+bucket/time/ss
+* 12 days / 1024 x 17min intervals
+
+bucket/time/sss/sss/ssc/ccc/rrr/ccc
+
+fixed file size to balance split rate vs. file scan time. vs. memory pressure:
+* 500K * 512 byte events/second = 244MB/second = 20TB/day
+* multiple of fs block = 4K
+* split rate max of 1/second => 256MB, 2/second => 128MB files, 4/s => 64MB files
+* try to allow the file size to not matter to the read/write process so it can be adjusted
+* allow lazy splitting to happen during reduced load???
+
+
+write:
+[]ts = lp32(ts) and split into a slice of 3 character strings
+cd bucket_dir
+for i, c3 in []ts:
+  if cd c3 works:
+    next
+  else
+    stat c3
+    if file
+      append_or_split(i, c3, stat, []ts)
+    if dir
+      next
+
+append_or_split:
+  if file > max_file_size
+    mv(file, file.p), mkdir(file)
+      any other writing process will then write inside the directory and create files as needed
+    open file.p and read every message
+      call the write process given the current starting offset
+
+read:
+for i, c3 in []ts:
+  if cd c3 works:
+    next
+  else
+    stat c3
+    if file
+      read_file process
+    if dir
+      race condition between previous cd and now... no worries
+      cd c3
+      next
+    if not there
+     make_new_file process
+
+make_new_file:
+ 64bit_time,crc32,2byte_size,serialized_event
+ index of offsets???????????
+ multiple processes appending??????
+    one goroutine per open file. buffer incoming messages to each???
+*/
+
+/*
 bloom filter files:
 * deduplicate incoming events with a fixed 0.001% false positive rate
 * easily rebuilt from accumulated events if lost or corrupted
+* any possible false positives should be put in a different data store????
 * discarded after "freeze"
 * key size is fixed at bucket creation time
 
@@ -125,7 +192,8 @@ leveldb:
 bitcask:
 * https://code.google.com/p/gocask/
 * http://downloads.basho.com/papers/bitcask-intro.pdf
-
+* crc,ts,key_size,value_size,key,value
+* key -> file_id,value_size,value_offset,tstamp
 http://godoc.org/github.com/cznic/kv
 
 http://godoc.org/github.com/cznic/exp/dbm
