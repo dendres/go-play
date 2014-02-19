@@ -18,7 +18,8 @@ event_rate_target:
 * 500K * 512 byte events/second = 244MB/second = 20TB/day
 
 bucket_event_count and storage size:
-* 500K events / second * 1024 seconds ~ 512M events/bucket
+* current 2K events / second * 1024 seconds ~ 2M events/bucket
+* target 500K events / second * 1024 seconds ~ 512M events/bucket
 * and around 244MB/second * 1024 seconds ~ 244GB/bucket means 2 buckets per ec2 disk
 * should be possible to handle the indexing for 512M event id's per bucket... right???
 * assuming massive compression is possible...
@@ -55,83 +56,24 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 */
 
 /*
-filter files:
-* fixed sized bit arrays that answer "Seen this event?" with "Exactly Never" or "Maybe"
-* basically the opposite of a bloom filter giving a probabilistic result
-* efficiently deduplicate incoming events
-* initially created as sparse files, but should fill up fast.
+bloom filter files:
+* deduplicate incoming events with a fixed 0.001% false positive rate
 * easily rebuilt from accumulated events if lost or corrupted
 * discarded after "freeze"
+* key size is fixed at bucket creation time
 
-filter.New(key_length int, path)
-* makes file
-* writes fixed width hader field with key_length
-* other header fields????
+adjust key size for each new bucket:
+* 24 hours = 84.4 time buckets
+* event_estimate = max(last 200 time bucket event_count)
+* bk := bloomkeybits(event_estimate)
 
-filter.Set(key int64) error
-* 0 < key < (1<<40) // never make a 1TB bit array.
-* offset = len(header) + key
-* file.Seek(offset, 0)
-* b := []byte{0}
-* file.Read(b) // read a whole byte, but only modify 1 bit.
-* b = b[0] | 128
-* file.Write(b)
-* return error on disk error
-1 seek, 1 read, 1 write
-
-filter.Get(key int64) bool
-* validate key
-* offset = len(header) + key
-* b := []byte{0}
-* ReadAt(b, offset)
-* if b[0] & 128 == 1 return true
-* return false
-1 seek 1 read
-
-func (f *filter) GetSet(key int64) (found bool)
-* validate key
-* offset = len(header) + key
-* b := []byte{0}
-* file.Seek(offset, 0)
-* file.Read(b) // read a whole byte, but only modify 1 bit.
-* if b[0] & 128 == 1 return true
-* b = b[0] | 128 // set the 1 bit
-* file.Write(b)
-
-
-* ReadAt(b, offset)
-* if b[0] & 128 == 1 return true
-* return false
-
-
-ok... try again:
-* 2MB 3,3 bloom filter needs 48 bits of input
-* give it: 16 bits of time + 32 bits of crc
-* and only cover 500K events
-* ( 1 - 2.71828^(-2 * (500000) / (2^24)) )^2 = 0.33% false positives
-* 2MB per second = 2GB of filter per bucket
-
-512MB 4,4 bloom filter needs 64 bits of input
-* give it 32 time + 32 crc
-* and cover 5*10^8 events/bucket
-* ( 1 - 2.71828^(-2 * (5*10^8) / (2^32)) )^2 = 4% false positive rate
-* and it drops off fast 0.002% at 10^7
-
-
-ok... try again:
-
-how about ditching the event key and combining deduplication with the token store in a pre-fab kv store?
-is the event a duplicate?
-* look up all the unique tokens in the store. return all the docs they point to. find the intersection.
-* that sounds really slow and doesn't account for the same message being permitted over time.
-
-tokens[token]->event_key
-
-
-
-
-
-
+if bk < 24
+ 24 bit time + 24 bit crc32 minimum!
+if bk < 32
+ bk bit time + bk bit crc
+else
+  37 bit time + 32 bit crc +
+  start adding bits from shn, app, and level (the only remaining visible fields)
 
 */
 
@@ -141,7 +83,7 @@ no header.
 2 byte message length, message
 
 
-store.Write(b []byte)
+store.Append(b []byte)
 * offset = os.Seek(0, 2) // EOF
 * os.Write(len(b))
 * os.Write([]byte)
@@ -169,116 +111,41 @@ repair corrupt file?
 */
 
 /*
-Bucket Data Structures
+choose specialized data structures for the following purposes:
+* 3 - 64 character token -> frequency int32
+* 3gram -> []token
+* global token -> []bucket
+* global 3gram -> []bucket
 
 
+leveldb:
+* http://www.igvita.com/2012/02/06/sstable-and-log-structured-storage-leveldb/
+* https://code.google.com/p/leveldb-go/
 
-2^16 * 4 = 256K
+bitcask:
+* https://code.google.com/p/gocask/
+* http://downloads.basho.com/papers/bitcask-intro.pdf
 
+http://godoc.org/github.com/cznic/kv
 
-events.store: 244GB
+http://godoc.org/github.com/cznic/exp/dbm
 
-accumulate kv of tokens -> []something???  all 6 bytes of event_id???? checksum only???
-* non-lossy normal on disk hash table
+more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/vfs.txt
 
-6 bytes * 5*10^8 = 2.7GB token database per 17min
+*/
 
-
-
-
-
-
-
-
-
-
-
-* index should test existence in ~ 2 disk seeks
-* events should be expected to arrive out of order
-* key = event_key
-* value = event bytes directly off wire
-* file operations:
-  ReadAt(b []byte, off int64) = pread(2)
-  WriteAt(b []byte, off int64) = pwrite(2)
-  Truncate(size int64) = syscall.Ftruncate ?????
-  more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/vfs.txt
-* sparse event_id list would be 2^48 bits or 32 TB. larger than FS file size limit.
-
-
-thought experiment for rough tree structure:
-first 16 blocks are first layer index:
-256x256 matrix of pointers to all combinations of the first 2 bytes.
-
-read:
-* seek to the first 2 bytes i1. read 3 bytes i2.
-* seek from beginning to i2. read 6 bytes i3.
-* if i3 == event_id, then it's alreay here
-
-????????????????????
-
-http://www.igvita.com/2012/02/06/sstable-and-log-structured-storage-leveldb/
-
-SSTable and LevelDB and Log Structured Merge Trees
-
-Leveldb would be redoing compression and checksum work that we've already done!
- - re-implement using these pre-computed values as input
-
-
-
-
-
-
-
-extendible hashing:
- - when the data gets over filled, double the index size and add more buckets
-
-linear hashing:
- - split policy or "load factor"
- - state: i = current round of splitting
- - state: p = the next bucket to split
-
-
-
-4GB bloom filter for every 244GB ?
-
-4GB bloom filter as 4,4
-m = 2^32 bits in the bloom filter array
-k = 2 hash functions
-n = 5*10^8 events
-
-( 1 - 2.71828^(-2 * (5*10^8) / (2^32)) )^2 = 4% chance of false positive is still too high
-
-
-http://stackoverflow.com/questions/635728/opposite-of-bloom-filter
-http://www.somethingsimilar.com/2012/05/21/the-opposite-of-a-bloom-filter/
-http://www.i-programmer.info/programming/theory/4641-the-invertible-bloom-filter.html
-* lossy hash table or LRU cache ???
-* https://github.com/jmhodges/opposite_of_a_bloom_filter
-
-how big is a prefix tree of all possible 9 byte id's ???
-
-break messages up into even sized blocks for fixed offset file storage
-
-sparse bit array: 2^(9*8) bits long. seek to the 9byte address and set 1 or 0
-
-* bisection or binary search of a linear list. fibonaccian search: same, but no division
-
-binary tree of fixed width keys:
-key,left,right    where left and right are other keys
-
-reading:
-* read root key and decide next_key = left or right
-* seek to and read next_key and repeat till ????
-
-prefix-tree is also a good fit for autocompleting dictionary
-
-bloom_filter_false_positive_rate = ( 1 - 2.71828^(-kn/m) )^k
-
+/*
 
 buckets/tim/es:
 * 32768, 12.1 day directories / 1024, 17.1 minute buckets
 
+incoming.filter
+* 128MB - 32GB bloom filter deduplicates messages
+* discard on freeze
 
+token frequency data????
+* compact, searchable, balanced, prefix tree or normal hash table
+* token -> count
 
 3gram.kv:
 * key = 3gram
@@ -304,24 +171,33 @@ global/all_tokens.kv
 * value = []tim/es
 
 
-
-
-* bucket messages onto local ephemeral filesystem then compress and archive to s3
-
 */
 
 /*
 Buck:
 
-receive Tailer "Events"
+receive "Events" from clients and peers
 
-build a multi-level index:
-3gram(h_e) -> []token
-token(hello) -> []event_key
-event(event_key) -> event
+build a multi-level index per bucket:
+* bloom filter to deduplicate incoming events
+* token frequecy token[hello] -> count
+* 3gram[h_e] -> []token
+
+build a global index:
+* token[hello] -> []bucket
+* 3gram[l_o] -> []token
+
+freeze the bucket for long term storage:
+* frequency sorted token list
+* gzip events in key order with tokens replaced
+
 
 and respond to requests for bulk event movement:
-events(start_time, end_time) -> []bucket_path
+* bucket(time_range) -> []bucket_path
+* bucket([]3gram, time_range) -> []bucket_path
+* bucket([]token, time_range) -> []bucket_path
+* events(bucket_path) -> []event
+
 */
 func main() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
