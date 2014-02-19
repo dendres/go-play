@@ -56,15 +56,26 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 */
 
 /*
+What if append-only event store files are created and NOT deduplicated.
+* 3x message count. still split on file size.
+* but ONLY deduplicate on split and only partially with in memory LRU cache
+
+the token frequency analysis purposes:
+* identify bucket/time/ss containing the token for retrieval from long term storage
+* sort tokens for decompression
+* I don't think either of these is a huge problem if it's 1/3 duplication!!!!!!!!!!!!!
+* so only try to deduplicate if it's cheap or necessary (like at freeze time when events can be statically sorted.)
+
+
 splitting tree on FS:
-ideal time = 35 bit second + 30 bit ns. can reduce fractional second granularity
-60 bit fits in 12 lp32 characters
-65 bit fits in 13
-32 bit of crc ~ 6 characters
-number of files in 3 characters = 32^3 = 32768
-can't list in these directories!
-shield them from mlocate
-any other system processes to wory about???
+* ideal time = 35 bit second + 30 bit ns. can reduce fractional second granularity
+* 60 bit fits in 12 lp32 characters
+* 65 bit fits in 13
+* 32 bit of crc ~ 6 characters
+* number of files in 3 characters = 32^3 = 32768
+* can't list in these directories!
+* shield them from mlocate
+* any other system processes to wory about???
 
 bucket/time/ss
 * 12 days / 1024 x 17min intervals
@@ -75,8 +86,26 @@ fixed file size to balance split rate vs. file scan time. vs. memory pressure:
 * 500K * 512 byte events/second = 244MB/second = 20TB/day
 * multiple of fs block = 4K
 * split rate max of 1/second => 256MB, 2/second => 128MB files, 4/s => 64MB files
-* try to allow the file size to not matter to the read/write process so it can be adjusted
+* try to allow the file size to not matter to the read/write process so it can be adjusted????
 * allow lazy splitting to happen during reduced load???
+
+Message count and size estimates for a fixed 128MB file:
+* (8 + 4 + 2, len(E)) * N = max size
+* 0 len string produces serialized event size ~ 45 bytes including time crc and len
+* 64K max + 14 = 65550
+* max number of min sized events in 128MB = 128 * 1024 * 1024 / 45 = 3M events
+* max number of average sized events      = 128 * 1024 * 1024 / 1KB = 128K events
+* max number of max sized events in 128MB = 128 * 1024 * 1024 / 65550 = 2K events
+
+if there is no fsync, then writes can be re-ordered:
+* redundancy inserted over a large time range should cover this
+
+multiple processes appending??????
+* one goroutine per open file with a fixed size buffered channel for incoming messages
+* pushes back to the tcp listener that blocks
+* pushes back to the udp listener that drops
+* one receive channel for all incoming events
+* this goroutine has an in-memory map of channels to open file processors and it sorts to channel????
 
 
 write:
@@ -99,26 +128,164 @@ append_or_split:
     open file.p and read every message
       call the write process given the current starting offset
 
-read:
+read(event_id)
 for i, c3 in []ts:
   if cd c3 works:
     next
   else
     stat c3
     if file
-      read_file process
+      scan_file_for_id(event_id)
     if dir
       race condition between previous cd and now... no worries
       cd c3
       next
     if not there
-     make_new_file process
+      return false
 
-make_new_file:
- 64bit_time,crc32,2byte_size,serialized_event
- index of offsets???????????
- multiple processes appending??????
-    one goroutine per open file. buffer incoming messages to each???
+make_new_files:
+* 2_byte_size,serialized_event(includes time, crc, etc...)
+
+scan_file_for_id:
+* 2_byte offset, 8 byte time, 4 byte crc = 14 byte fixed sized buffer
+* read buffer. compare time. if match compare crc. if match. make size buffer and read message. prepend time and crc
+* if not match, seek forward size bytes and repeat
+* return false on EOF
+
+
+== parts to make =
+
+
+
+dispatcher:            writer:
+  map:
+    writer_interface:
+      events->         ->events
+      cleanup->        ->cleanup
+     switch:
+      split<-          <-split
+      finished<-       <-finished
+
+event file writer goroutine:
+* takes a buffered channel of []byte
+* takes a finished channel of bool
+* takes a cleanup channel of bool
+* takes a split channel of ????
+* seek to EOF
+* read []byte
+* full_write_buffer = len([]byte) + []byte
+* write full_write_buffer
+* when the channel is empty, sleep for 1 second, fsync, send true on finished channel, and exit
+* when cleanup channel is true, fsync and exit
+* stat file_size on open, track count of bytes written
+* when file_size > max, split:
+  mv(file, file.p) && mkdir file
+
+dispatch goroutine:
+* takes 1 buffered channel of []byte incoming messages off the wire
+* keeps map[try] -> writer_interface_object holds channels
+* dispatch new message:
+  make a dirs = []try{full/path/to/time/ss, time/ss/sss, time/ss/sss/sss, etc... }
+  for try := range dirs {
+    channel = map[try]
+    if channel
+      send to channel
+      break
+    else
+      stat full_path_to_try
+      if directory
+        continue
+      if file or no such file:
+        open writer_interface and save entry to map
+        send to channel
+        break
+      if permission denied or disk full etc...
+        log/escalate alert
+        drop message
+
+
+Split process:
+* writer:
+  sees file reach max size
+  fsync and close file
+  mv(file,file.p) && mkdir file
+  send true on split channel
+  open file.p and finish writing
+  fsync and close file.p
+  run split_file_processor
+  exit
+* dispatch:
+  sees true on split channel
+  removes entry from map
+
+
+split_file_processor:
+* takes path to file.p static file that will no longer be written to
+* takes a channel to send messages back to dispatch.
+* read each event. use a small, fixed size lru cache to deduplicate some of the messages
+* write intermediate bucket files that match the next level down time/ss/sss/sss etc...
+* delete file.p
+* read each file. use a small, fixed size lru cache to deduplicate some more of the messages
+* send the (slightly more) unique messages back to dispatch
+* delete intermediate buckets
+
+
+https://github.com/golang/groupcache/blob/master/lru/lru.go
+*/
+
+/*
+back to the same dedup problem as before, but on a fixed size data set!!!
+* append-only on-disk tree structure
+* fast append
+* fast key lookup
+* ideally less than 1% of raw event storage 64MB to 292MB => 655k to 3MB of index
+
+http://guide.couchdb.org/draft/btree.html
+* append-only b+tree
+* the root node must be re-written every time the file is updated
+* old parts are never overwritten... so every old root is a consistent "snapshot" of the db???
+* append new leaf node
+* read parent???
+* append new parent to reference new leaf node
+* continue appending new parents all the way through to the root node
+* "commit" is when the root gets overwritten
+* read: root node is the end of the file. traverse tree pointers.
+* is this a huge amout of wasted space or no???
+* how to locate the last valid root node????
+  write root node with length and some magic ID byte ????
+  if the last node in the file a corrupted root node or not a root node,
+    then seek backward one node at a time till the last valid root node is found.
+
+could have fixed width nodes with fixed width id's and overwrite in place... won't handle corruption well
+
+
+if there is no fsync, then writes can be re-ordered!
+write barriers????
+
+http://sphia.org/architecture.html
+* LSM is a collection of sorted files that are periodically merged
+* region in-memory index with a in-memory key index
+* no internal page to page links???
+
+
+
+leveldb:
+* http://www.igvita.com/2012/02/06/sstable-and-log-structured-storage-leveldb/
+* https://code.google.com/p/leveldb-go/
+
+bitcask:
+* https://code.google.com/p/gocask/
+* http://downloads.basho.com/papers/bitcask-intro.pdf
+* crc,ts,key_size,value_size,key,value
+* key -> file_id,value_size,value_offset,tstamp
+http://godoc.org/github.com/cznic/kv
+
+http://godoc.org/github.com/cznic/exp/dbm
+
+more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/vfs.txt
+
+http://en.wikipedia.org/wiki/B-tree
+
 */
 
 /*
@@ -185,20 +352,7 @@ choose specialized data structures for the following purposes:
 * global 3gram -> []bucket
 
 
-leveldb:
-* http://www.igvita.com/2012/02/06/sstable-and-log-structured-storage-leveldb/
-* https://code.google.com/p/leveldb-go/
 
-bitcask:
-* https://code.google.com/p/gocask/
-* http://downloads.basho.com/papers/bitcask-intro.pdf
-* crc,ts,key_size,value_size,key,value
-* key -> file_id,value_size,value_offset,tstamp
-http://godoc.org/github.com/cznic/kv
-
-http://godoc.org/github.com/cznic/exp/dbm
-
-more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/vfs.txt
 
 */
 
@@ -206,10 +360,6 @@ more about the vfs cache: https://www.kernel.org/doc/Documentation/filesystems/v
 
 buckets/tim/es:
 * 32768, 12.1 day directories / 1024, 17.1 minute buckets
-
-incoming.filter
-* 128MB - 32GB bloom filter deduplicates messages
-* discard on freeze
 
 token frequency data????
 * compact, searchable, balanced, prefix tree or normal hash table
@@ -242,9 +392,11 @@ global/all_tokens.kv
 */
 
 /*
-Buck:
+Buck Processes:
 
 receive "Events" from clients and peers
+
+
 
 build a multi-level index per bucket:
 * bloom filter to deduplicate incoming events
