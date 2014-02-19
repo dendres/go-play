@@ -35,10 +35,14 @@ type Bita struct {
 	err error
 }
 
-// Error cleans up and returns a string representation of the error.
-func (b *Bita) Error() error {
+func (b *Bita) Finish() {
 	_ = b.file.Sync()
 	_ = b.file.Close()
+}
+
+// Error cleans up and returns a string representation of the error.
+func (b *Bita) Error() error {
+	b.Finish()
 	return fmt.Errorf("file = %s, offset = %d, mask = %d, buf = %v, op = %s, error: %s",
 		b.file.Name(), b.offset, b.mask, b.buf, b.op, b.err.Error())
 }
@@ -57,6 +61,7 @@ func Open(path string) (*Bita, error) {
 }
 
 // Set writes a single byte to the array
+// seek, read, seek, write = 4 iops
 func (b *Bita) Set(index int64) error {
 	b.offset = index / 8
 	b.mask = uint8(128) >> uint8(index%8)
@@ -79,6 +84,7 @@ func (b *Bita) Set(index int64) error {
 }
 
 // Get reads the bit at the given index and returns a bool.
+// seek read = 2 iops
 func (b *Bita) Get(index int64) (bool, error) {
 	b.offset = index / 8
 	b.mask = uint8(128) >> uint8(index%8)
