@@ -289,29 +289,6 @@ http://en.wikipedia.org/wiki/B-tree
 */
 
 /*
-bloom filter files:
-* deduplicate incoming events with a fixed 0.001% false positive rate
-* easily rebuilt from accumulated events if lost or corrupted
-* any possible false positives should be put in a different data store????
-* discarded after "freeze"
-* key size is fixed at bucket creation time
-
-adjust key size for each new bucket:
-* 24 hours = 84.4 time buckets
-* event_estimate = max(last 200 time bucket event_count)
-* bk := bloomkeybits(event_estimate)
-
-if bk < 24
- 24 bit time + 24 bit crc32 minimum!
-if bk < 32
- bk bit time + bk bit crc
-else
-  37 bit time + 32 bit crc +
-  start adding bits from shn, app, and level (the only remaining visible fields)
-
-*/
-
-/*
 store files:
 no header.
 2 byte message length, message
@@ -394,8 +371,13 @@ global/all_tokens.kv
 /*
 Buck Processes:
 
-receive "Events" from clients and peers
 
+*/
+
+/*
+Buck Data:
+
+receive "Events" from clients and peers
 
 
 build a multi-level index per bucket:
