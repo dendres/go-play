@@ -7,8 +7,8 @@ import (
 
 /*
 interface files that store events
-* events already have timestamp and crc32
-* 2 byte size. 64K max element
+* events already have timestamp and crc32, so don't add them to this data structure.
+* 2 byte size. 64K max element.
 
 methods:
 * append([]byte)

@@ -56,15 +56,27 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 */
 
 /*
-What if append-only event store files are created and NOT deduplicated.
-* 3x message count. still split on file size.
-* but ONLY deduplicate on split and only partially with in memory LRU cache
+Deduplicate Events on READ, NOT WRITE:
+* accept the 3x event count in initial store files
+* stip high order bits from key on write (high order bits are stored in the file name)
+* split on fixed file size
+* sort and remove duplicates in memory on split when reading the keys into memory
+* ensure that in-memory sort structure takes up less than N x 4096 blocks in the fs cache
+
 
 the token frequency analysis purposes:
 * identify bucket/time/ss containing the token for retrieval from long term storage
 * sort tokens for decompression
 * I don't think either of these is a huge problem if it's 1/3 duplication!!!!!!!!!!!!!
 * so only try to deduplicate if it's cheap or necessary (like at freeze time when events can be statically sorted.)
+
+
+Use the built in sort.
+* XXX later come back and optimize
+* http://golang.org/pkg/sort/
+* http://en.wikipedia.org/wiki/Radix_sort
+* http://www.sorting-algorithms.com/
+* https://github.com/nlfiedler/sortingo
 
 
 splitting tree on FS:
