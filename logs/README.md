@@ -24,20 +24,12 @@ Provide 3 interfaces to access log messages:
 * "history": tmp_index = load_index(start_time, end_time). tmp_index expires after E hours/days.
 
 
-Assumptions
-===========
-* "domain separation" means separate full copies of the log processing system and interfaces
-* log processing "domain" can be defined arbitrarily to cover any number of servers
-* for each "domain", "history" can only be retrieved by time.
-* ONLY the broker needs to be clustered and available
-
-
 Data Pattern
 ============
 
 Event:
 * version uint8:   encoding version
-* point uint64:    10^-8 since unix epoch loops in year 7819
+* point uint64:    count of 10^-8 intervals since unix epoch loops in year 7819
 * crc   uint32:    crc32 checksum of "line" as it should appear in the browser
 * shn   string:    short host name
 * app   string:    overloaded = app_name || process_name || process_id
@@ -45,6 +37,7 @@ Event:
 * tokens []string: list of word-like tokens from the log line
 * line  string:    log line where time, shn, and app have been removed
 * l     string:    the encoded string
+
 
 Serialized Event:
 
@@ -59,22 +52,10 @@ Serialized Event:
 
 Tailer:
 
-* buckets/tim/es.b: flat file: append events: 3 byte fixed Event length + data
+* buckets/tim/es.b: flat file: append events: 2 byte fixed Event length + data
 
 Buck:
-* events.kv[event_key] = event bytes directly off wire
-* tokens.kv[token_string] = []event_key
-* 3gram.kv[3gram] = []token
-* tokens.b is a gzip(listB(2,6)) created during freeze, sorted by frequency, used ONLY for compression
-* static.kv[event_key] = gzip(events with "line" tokenized by tokens.b)
-* global/all_3gram.kv[3gram] = []tim/es
-* global/all_tokens.kv[token_string] = []tim/es
-
-
-log.io input format?
-
-
-Elasticasearch bulk insert format?
+* sort????
 
 
 Process and Message Pattern

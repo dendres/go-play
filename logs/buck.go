@@ -57,7 +57,7 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 
 /*
 Deduplicate Events on READ, NOT WRITE:
-* accept the 3x event count in initial store files
+* accept the 3x event count in intermediate store files
 * stip high order bits from key on write (high order bits are stored in the file name)
 * split on fixed file size
 * sort and remove duplicates in memory on split when reading the keys into memory
@@ -69,14 +69,6 @@ the token frequency analysis purposes:
 * sort tokens for decompression
 * I don't think either of these is a huge problem if it's 1/3 duplication!!!!!!!!!!!!!
 * so only try to deduplicate if it's cheap or necessary (like at freeze time when events can be statically sorted.)
-
-
-Use the built in sort.
-* XXX later come back and optimize
-* http://golang.org/pkg/sort/
-* http://en.wikipedia.org/wiki/Radix_sort
-* http://www.sorting-algorithms.com/
-* https://github.com/nlfiedler/sortingo
 
 
 splitting tree on FS:
