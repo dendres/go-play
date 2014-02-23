@@ -8,7 +8,12 @@ import (
 
 /*
 event line parsing:
+* if no key/value format is received, key=message, value = the log line string
+* parse tokens from values
 
+*/
+
+/*
 http://golang.org/pkg/regexp/
 https://github.com/StefanSchroeder/Golang-Regex-Tutorial
 

@@ -1,9 +1,111 @@
 
-Event Collection and Processing Goals
-=====================================
+Reliable Event Log Handling
+===========================
 
-* reduce cost of searching logs
-* compensate for a lack of reliability in high performance structured data sets
+abstract (4 sentences, 100 readers)
+  here is a problem
+    it's an interesting problem
+    it's an unsolved problem
+  here is my idea/claim/contribution
+    your paper should have only 1 clear, sharp, specific, idea
+    if you have lots of ideas, write lots of papers.
+  my idea works (details, data)
+
+
+paper1:
+Tunable durability allows event log processing systems to make efficient use of limited resources.
+
+paper2:
+A log event processing system with an elected master does not significantly improve delivery efficiency or reliability over a masterless, stateless system.
+
+allow 2 server failures in a 3 to 6 server system. replication factor 2. message exists on 3 random servers. any 2 can die. compare this to the paxos case with replication factor 2 in 3,4,5,6 server systems
+
+???????? not sure this stands on it's own.... might need to be made more specific by the need for sorting??????
+
+... what kafka does most of the time in a 3 server system, is send every event to the other 2 servers.
+    a stateless server can do this without paxos.
+... no client can guarantee that events are sent in order they occurr without waiting for 48 hours or so
+    so kafka can't queue the events in order
+    some event consumers don't care about order
+    but some do. so a sort is required... and sorting is expensive.
+    so the event receiver should ensure that it's disk write contributes to the sorting effort
+??????? too long. write this better!!!
+  counter... but I need to scale to 4, 5, or 6 servers
+    no problem, the replication count remains fixed. add more servers. choose random servers to replicate to.
+
+XXX is a reliable and efficient way to collect, store, and use a year's worth of event logs.
+
+
+
+Moderate durability has already been achieved by existing TCP syslog implementations, logstash, and heka, but none of these solutions address the problem of:
+* failures in downstream index storage
+* replay of of a time period in detail
+* efficient long term storage
+
+the first thing a reliable message delivery system must do is make sure that it's not going to loose the event.
+give a detailed account of how kafka ensures message durability with master election, and replication
+calculate how much time it takes for the other kafka nodes to recover from failure and show that the most effective way to recover from intermediate storage node failure is to just let new messages come in.
+
+
+
+
+efficient:
+Reliability can be set on a per message basis Allowing XXX to determine how to make efficient use of it's limited resources.
+
+
+It is more reliable, but less efficient at event delivery than rsyslog, syslog-ng, logstash, and heka because events are delivered over multiple time intervals
+
+
+
+
+
+compare to syslog's event format:
+
+syslog usess a parsed ASCII format designed for interoperability. see rfc5424 section 6.
+
+the main problems with this format are:
+* messages of unlimited size make time and space guarantees much more difficult to achieve. cap messages at 64KB.
+* variable width 9 field date specification with ascii separator fields requires X operations to parse.
+  Instead a single uint64 requires Y operations to parse.
+  events occuring before unix epoch should be considered out of scope by an event log processing system.
+* priority = facility,severity is difficult to use
+  facility should be completely replaced by a variable length "application name" up to 256 bytes
+* structured data contains parsed ascii separator characters
+  instead, structured data should contain utf-8 strings accessed by offset:
+  1_byte_key_length,1_byte_value_length,key,value
+
+
+vs:
+
+
+Serialized Event:
+* version: 1 byte fixed
+* point  : 8 bytes fixed
+* crc    : 4 bytes fixed
+* shn    : 1 byte length + data
+* app    : 1 byte length + data
+* marks  : 2 byte length + data
+* tokens : 2 byte length + data
+* line   : 2 byte length + data
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 Anti-Goals
@@ -40,7 +142,6 @@ Event:
 
 
 Serialized Event:
-
 * version: 1 byte fixed
 * point  : 8 bytes fixed
 * crc    : 4 bytes fixed
