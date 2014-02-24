@@ -1,6 +1,43 @@
 
-Reliable Event Log Handling
-===========================
+Abstract
+========
+
+How durable does that logged event have to be?
+
+While it is possible to consider durability a property of the event processing and/or consuming services, the business need for event delivery can be more directly tied to the cost of event processing when applications specify how durable they would like each event to be.
+
+Abstract
+========
+
+Why sort logged events by time?
+
+The importance of sorting events in time is determined by the event consumer. Consumers that perform monitoring event correlation and alerting are generally more sensitive to out-of-order arrival and less sensitive to latency. Consumers that aim to display events for debugging are often willing to tolerate out-of-order arrival to achieve low-latency delivery. Consumers that archive events offline can wait a long time to ensure that events have stopped coming in before packing them up and deleting the local copy.
+
+Abstract
+========
+
+Longer wait, better sort!
+
+Server and service crashes and restarts lead to events arriving out of order. If a distributed, event-receiving service is tasked with maintaining a sorted list of events, then the longer an event consumer waits before querying for a given time period, the more ordered the events will be when they arrive.
+
+Abstract
+========
+
+Masterless is more stable and just as fast.
+
+A log event processing system with an elected master does not significantly improve delivery efficiency or reliability over a masterless system where producers choose a random processing server and processing servers choose random replication partners. allow 2 server failures in a 3 to 6 server system. replication factor 2. message exists on 3 random servers. any 2 can die. compare this to the kafka case with replication factor 2 in 3,4,5,6 server systems.
+
+Abstract
+========
+
+Pre-compressing large sets of log events saves a non-trivial amount of space and can be done efficiently.
+Applying word-scale pre-compression to a set of N log events reduces the storage space by ???N??some???formula??? and is highly applicable to to the long term storage of large numbers of events.
+
+
+
+
+
+
 
 abstract (4 sentences, 100 readers)
   here is a problem
@@ -12,30 +49,41 @@ abstract (4 sentences, 100 readers)
   my idea works (details, data)
 
 
-paper1:
-Tunable durability allows event log processing systems to reduce excessive replication and disk sync.
 
 
-paper4:
+
+Given set of N log events in a single file with size S, S can be reduced by ???N??some???formula??? by making a frequency sorted list of most frequently occurring "words" in the event's utf-8 strings and then replacing the words with an easily detectable, fixed size token representing the offset in the list. As a side effect, the token list is a kind of searchable index that can answer the question, did this exact "word" occurr within a given time range. The token list itself can then be further processed via downcase, stemming, and even 3gram or soundex to allow natural language sorting.
+
+
+
+requirement:
+ - throughput/efficiency should approach kafka for 10 second batching when sorted time output is irrelevant
+ - for ~15min batching, with various hold down timers, throughput must also match kafka, but provide sorted output over that time interval
+ - hold_down timer from 0 seconds to 48 hours
+ - batch size from 10 to 1024 seconds
+XXXX so this implies that either the file structure should converge to kafka's for small hold_down and batch_size
+     OR... that the cost of the file structure is always the same as kafka's independent of hold_down and batch_size
+   must take a much closer look at kafka's disk handling to determine!!!!
+
+
+how important is sorting events by time?
+
 how inconsistent is the delivery order of the log sending application???
  - inconsistencies are possible due to server and service restart
  - but how frequent are they really
  - and how big of a deal is the out of order queue
+Can through match Kafka but also give the benefit of sorted time output?
+and for outputs that don't care about time
 
-
-paper3:
-unsorted consistent queue   vs  partially sorted inconsistent queue
+paper:
+long term archiving of log messages
+unsorted consistent queue   vs  partially sorted inconsistent queue???
 
 find the name of the tree I'm using: http://en.wikipedia.org/wiki/List_of_data_structures
 * split on fixed leaf size
 * fixed number of new leaf nodes
 
 
-
-paper2:
-A log event processing system with an elected master does not significantly improve delivery efficiency or reliability over a masterless, stateless system.
-
-allow 2 server failures in a 3 to 6 server system. replication factor 2. message exists on 3 random servers. any 2 can die. compare this to the paxos case with replication factor 2 in 3,4,5,6 server systems
 
 ???????? not sure this stands on it's own.... might need to be made more specific by the need for sorting??????
 

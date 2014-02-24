@@ -56,6 +56,17 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 */
 
 /*
+requirement:
+ - throughput/efficiency should approach kafka for 10 second batching when sorted time output is irrelevant
+ - for ~15min batching,with various hold down timers, throughput must also match kafka, but provide sorted output over that t\
+ime interval
+ - batch size from 10 to 1024 seconds
+ - hold_down timer from 10 seconds to 48 hours
+
+ - reliability from random server choice during replication with replica_count
+*/
+
+/*
 Deduplicate Events on READ, NOT WRITE:
 * accept the 3x event count in intermediate store files
 * stip high order bits from key on write (high order bits are stored in the file name)
