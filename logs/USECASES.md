@@ -16,13 +16,15 @@ Debugging
 Alerts
 ======
 
-* Alert when event[key] == exact_value
-* alert when event[key] =~ /regex/
-* alert when exact_word in event[message]
+Did a set of conditions occurr within a given time frame?
+for example, combinations of any of the following:
+* event[key] == exact_value
+* event[key] =~ /regex/
+* exact_word found in event[message]
 
 Metrics
 =======
 
-* count event when 
+* calculate event rate during a time interval
 
 

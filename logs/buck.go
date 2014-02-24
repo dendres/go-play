@@ -86,6 +86,14 @@ bucket/time/ss
 
 bucket/time/sss/sss/ssc/ccc/rrr/ccc
 
+XXXXXXXXXXXXXXXXXXXXX have to divide buckets among available disks
+need to keep a mapping for this!!!
+but not too durable because it's not super hard to rebuild from the directory listing
+map[timess] = root path where it can be found like buckets/disk1
+   so the full path becomes buckets/disk1/time/ss or buckets/disk1/timess  because it's 48 hours of stuff and year is never going to matter!!!!! ??????????????
+
+
+
 fixed file size to balance split rate vs. file scan time. vs. memory pressure:
 * 500K * 512 byte events/second = 244MB/second = 20TB/day
 * multiple of fs block = 4K

@@ -13,7 +13,24 @@ abstract (4 sentences, 100 readers)
 
 
 paper1:
-Tunable durability allows event log processing systems to make efficient use of limited resources.
+Tunable durability allows event log processing systems to reduce excessive replication and disk sync.
+
+
+paper4:
+how inconsistent is the delivery order of the log sending application???
+ - inconsistencies are possible due to server and service restart
+ - but how frequent are they really
+ - and how big of a deal is the out of order queue
+
+
+paper3:
+unsorted consistent queue   vs  partially sorted inconsistent queue
+
+find the name of the tree I'm using: http://en.wikipedia.org/wiki/List_of_data_structures
+* split on fixed leaf size
+* fixed number of new leaf nodes
+
+
 
 paper2:
 A log event processing system with an elected master does not significantly improve delivery efficiency or reliability over a masterless, stateless system.
@@ -56,7 +73,8 @@ Reliability can be set on a per message basis Allowing XXX to determine how to m
 It is more reliable, but less efficient at event delivery than rsyslog, syslog-ng, logstash, and heka because events are delivered over multiple time intervals
 
 
-
+pathologies of big data
+http://queue.acm.org/detail.cfm?id=1563874
 
 
 compare to syslog's event format:
@@ -91,10 +109,13 @@ Serialized Event:
 
 
 
+talk about flume and map reduce
+
+talk about fluentd
 
 
-
-
+http://wiki.apache.org/lucene-java/LuceneImplementations
+make sure you understand exactly how lucene operates
 
 
 
