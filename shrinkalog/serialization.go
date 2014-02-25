@@ -7,63 +7,135 @@ import (
 )
 
 /*
-Case 1: client -> server -> message_time_buckets
-* client sends list of time,encoded_msg
-* server converts time to file path and writes encoded_msg
-
-Case 2: client -> server -> log.io
-* client sends a list of encoded messages
-* server parses msg, encodes in log.io format and sends to waiting socket.io connections
-
-server has to decode and re-encode each message for log.io anyway...
-
-Case 1 + 2: client -> server -> message_time_buckets + log.io
-* client sends a list of encoded_msgs
-* server buffers each msg in memory
-* server buffers each parsed message in memory
-* disk writer reads the timestamp from a message, forms the file name, opens file, writes buffered unparsed message to disk, close file
-* log.io handler processes and encodes the message for log.io
+layer 6 reliability protocol
+keep it independent of other event content
 
 
-Therefore, the Event and Message format should look something like:
+12 Byte Header
+==============
 
-Event:
-* time object or time.Unix(), time.Nanoseconds()
-* hostname string
-* app string ... overloaded = app_name || process_name || process_id
-* line_checksum uint64 murmur3, or siphash: this should never be checksum("") or checksum("  ")
-* line string (contains the log line after removing time, hostname, and app) don't send empty lines or lines of all whitespace
+* head: 1 byte = 2 bit encoding + 2 bit replication + 2 bit priority + 2 bit time accuracy
+  head[:1] = event data encoding format
+    0 = Binary
+    1 = JSON
+    2 = a single utf-8 string
+  head[2:3] = replication: 0 to 3
+    "replication" in this context is the number of other log processing servers
+    which must receive the event before the client agent is permitted to delete the local copy.
+    0 = the receiving server will not replicate to any other server
+    1 = ... will replicate to 1 other server
+    2 = ... 2 other servers
+    3 = ... 3 other servers
+    no higher replication is permitted
+  head[4:5] = priority: 0 to 3
+   "priority" in this context is used with "replication" to determine message processing order
+   0 Action : immediate human intervention is required when this event is received
+   1 Error  : non-actionable application error
+   2 Info   : noteworthy condition or informational message
+   3 Debug  : debug-level events are usually only readable by one engineer
+  head[6:7] = crude time accuracy estimate 0 to 3. "point" must always be in ns, but the low bits may be junk.
+   0 = 10^-(0*3) = 1s
+   1 = 10^-(1*3) = 1ms (default for cloud systems)
+   2 = 10^-(2*3) = 1us (default for 10G PTP with GPS)
+   3 = 10^-(3*3) = 1ns
+     XXX this would be cooler if it was replaced with values taken directly from ntpd describing time accuracy
+* point  : 8 byte nanoseconds since unix epoch UTC overflows in year 2554
+* crc    : 4 byte crc32 checksum of the event. only checked when reading from disk.
+* length : 3 byte length of the event including 0xFF terminator. must come first so the crc can be used!
+* EOE    : 1 byte = 0xFF that will never appear in utf-8
+  together with length, the EOE provides redundant end of message detection
+  to allow recovery from file corruption
 
-Message:
-* some kind of header essentially compressing the rest of the messages?????
-* dedup "line" strings by checksum
-* tokenize away hostname if possible
-* tokenize away the high order bits of time is possible.
-* list of tokenized events
+XXXXXX what if everything outside the routing fields are never touched?
 
-Message2:
-* hash table of lines... map[line_checksum]string of lines or something?????
-* []string of unique hostnames
-* []string of unique app names
-* []Event{time, line_checksum, hostname_index, app_index}
-* []DuplicateEvent[]
-this handles large string deduplication
-
-can't have a format that requires reading all the messages into memory during encoding or decoding!
-
-could implement huffman encoding with space separated tokens???  where space is also a token
+receive, parse, tokenize, serialize
+pass to delivery layer and add the 12 byte fixed header
+store message and allow retrieval by time only.
+the sorting layer NEVER parses the message
+make it the responsibility of the consumer to detect and parse multiple formats??????
 
 
-* json-compatable nested hash and arrays of string, float, int, bool, etc...
-* schema free
-* does not need to be streamable because the routing/indexing fields will be part of the kafka protocol
-* based on existing standards
-* clean utf-8 strings would be nice
-* 8-bit clean binary fields would also be nice
-* relatively easy to port the decoder to a new language
+don't reinvent the encoding, but still allow the tokenization client side???????
+
+what if the
 
 
-input format:
+variable length fields
+======================
+
+* words  : 2 byte length + data. each word is 1 byte length + up to 256 bytes of characters
+* line   : 2 byte length + up to 64KB of unstructured line text with the words replaced with (0xFE + varint)
+* maps   : 1 byte count of the number of key/value pairs in the optional map to follow. 0 - 255
+* data   : the key/value data: 0 to 2^8 * (2 + 2^8 + 2^8) ~ 128KB
+    * 1 byte key_length
+    * 1 byte value_length
+    * up to 256 byte key
+    * up to 256 byte value
+
+
+variable length fields are 5 bytes to (5 + 2^16 + 2^16) + (2^8 * (2 + 2^8 + 2^8)) ~ 257KB
+
+empty event size = 12 + 5 + 0 + 1 = 18 bytes
+max event size = 12 + (5 + 2^16 + 2^16) + (2^8 * (2 + 2^8 + 2^8)) + 1 ~ 257KB
+
+
+Why not use syslog's event format?
+syslog usess a parsed ASCII format designed for interoperability. see rfc5424 section 6.
+the main problems with this format are:
+* problem: messages of unlimited size make time and space guarantees much more difficult to achieve
+  solution: cap messages at 256KB
+* problem: variable width 9 field date specification with ascii separator fields requires X??? operations to parse.
+  solution: 8 byte uint64 requires 2 operations: uint64(event[9:17]) to parse.
+    before unix epoch = out of scope for log processing
+* problem: "priority = facility,severity" is difficult to use
+  solution: separate routing from non-routing data:
+    routing = 2 bit replication + 2 bit priority
+    non-routing = "application name" up to 256 bytes
+* problem: structured data is separated by ascii characters, so those characters have to be escaped
+  solution: store all utf-8 strings with a length and never parse them
+
+
+Why not allow typed numbers in "data" ?
+  if numbers are distinguished, then they could be excluded from search terms. this would vastly reduce search terms.
+  unfortunately, one of the huge search targets is various "ID" type numbers.
+  so number values are being treated as characters in utf-8 strings like all other values and strings
+
+
+Why not do whatever logstash does?
+* logstash stores k/v data with lengths and routes by the k/v data
+* event consumers may route by k/v data AFTER this system has guaranteed it's durability
+
+
+Why not do whatever heka does?
+* typed protocol buffer... allows efficient parsing of the whole message
+  but I am explicitly NOT parsing most of the event = []byte received from the TCPCon.Read()
+  full message parsing is done by event consumers
+* uses an hmac... not a bad idea, but I'm hoping encryption will cover the intended use of the hmac
+* has an int32 severity
+
+
+How long does a word have to be to be worth picking out for compression and search?
+* word gets replaced with 0xFE + varint representing it's spot in the "words" array
+* 1 extra byte (word length) is needed to store the word in the words array
+* word cost = 3 to 4 bytes more than leaving it in the line
+* benefit = ~ 1/3 of the indexing process is now finished
+
+
+Is there some standard for determining how much reliability is required for event delivery?
+* I could not find an existing standard
+
+
+Input Format:
+* client must listen on localhost: udp/tcp 5465 (netops-broker in /etc/services)
+* and accept a variety of formats:
+  the internally used binary format
+  json
+  xml
+  csv
+
+
+
+
 * syslog lines, json, xml and various other formats become some kind of go structure??
 * how does heka parse plaintext with regex????
 
@@ -255,7 +327,6 @@ loop:
 
 */
 
-
 const (
 	null_string     = ``
 	space_character = 0x20
@@ -324,10 +395,7 @@ func Tokenize(lines <-chan string, words chan<- string, ips chan<- net.IP) {
 	for line = range lines {
 
 		// remove the ip from line before looking for other tokens
-		re.ReplaceAllString(src, repl string) string
-
-
-
+		//		re.ReplaceAllString(src, repl string) string
 
 		for _, c = range line {
 
