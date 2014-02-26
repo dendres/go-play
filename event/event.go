@@ -6,44 +6,64 @@ import (
 )
 
 /*
-12 Byte Header
-==============
-
+Event Serialization:
 * event[0:3] crc of event[4:]
 * event[4] 2 bit encoding + 2 bit replication + 2 bit priority + 2 bit time accuracy
-   2 bits of event data encoding format:
-    0 = utf-8 string including json, xml, and any other text based serializations
-    1 = gzip(utf-8 string)
-    2 = Internal Binary Format
-    3 = Reserved
-  2 bits of replication: 0 to 3
-    "replication" in this context is the number of other log processing servers
-    which must receive the event before the client agent is permitted to delete the local copy.
-    0 = the receiving server will not replicate to any other server
-    1 = ... will replicate to 1 other server
-    2 = ... 2 other servers
-    3 = ... 3 other servers
-    no higher replication is permitted
-  2 bits of priority: 0 to 3
-   "priority" in this context is used with "replication" to determine message processing order
-   0 Action : immediate human intervention is required when this event is received
-   1 Error  : non-actionable application error
-   2 Info   : noteworthy condition or informational message
-   3 Debug  : debug-level events are usually only readable by one engineer
-  2 bits of crude time accuracy estimate 0 to 3. "point" must always be in ns, but the low bits may be junk.
-   0 = 10^-(0*3) = 1s
-   1 = 10^-(1*3) = 1ms (default for cloud systems)
-   2 = 10^-(2*3) = 1us (default for 10G PTP with GPS)
-   3 = 10^-(3*3) = 1ns
-     XXX this would be cooler if it was replaced with values taken directly from ntpd describing time accuracy
 * event[5:12] time ns since unix epoch UTC overflows in year 2554
 * event[13:15] length of data NOT including EOE=0xFF
-* event[16:len(event)-1] data (DO NOT READ)
-* event[len(event)-1:] EOE=0xFF
-    1 byte = 0xFF "end of event" that will never appear in utf-8 or any supported Binary format
-    together with length, the EOE provides redundant end of message detection
-    to allow faster recovery from file corruption
+* event[16:len(event)-1] data
+* event[len(event)-1:] EOE=0xFF 1 byte "end of event" that will never appear in utf-8
+
+crc + data_length + EOE in serialization provides a high probability of detecting a partial or corrupted events
+and allows for several variations and optimizations depending on the data in hand.
 */
+
+// An Event contains data and routing attributes
+type Event struct {
+	// encoding format:
+	// 0 = utf-8 string including json, xml, and any other text based serializations
+	// 1 = gzip(utf-8 string)
+	// 2 = Internal Binary Format
+	// 3 = Reserved Internal Binary Format
+	enc int
+
+	// replication count:
+	// the number of additional log processing servers which must receive the event
+	// before the client will discard the local copy
+	// 0 = the receiving server will not replicate to any other server
+	// 1 = " " replicate to 1 other server
+	// 2 = " " 2 other servers
+	// 3 = " " 3 others
+	// no higher replication count is permitted
+	repl int
+
+	// routing priority:
+	// Priority queues are used throughout the event processing implementation.
+	// Higher priority events will have:
+	// * a higher probability of delivery
+	// * a possibly lower latency
+	// * a higher cost of delivery
+	//  3 Action : immediate human intervention is required when this event is received
+	//  2 Error  : non-actionable application error
+	//  1 Info   : noteworthy condition or informational message
+	//  0 Debug  : debug-level events are usually only readable by one engineer
+	pri int
+
+	// a crude time time accuracy estimate
+	// "point" must always be in ns, but the low bits may be junk.
+	// XXX this should be replaced with a specification directly from ntp or ptp
+	// 0 = 10^-(0*3) = 1s
+	// 1 = 10^-(1*3) = 1ms (default for cloud systems)
+	// 2 = 10^-(2*3) = 1us (default for 10G PTP with GPS)
+	// 3 = 10^-(3*3) = 1ns
+	acc int // time accuracy
+
+	// unsigned nanoseconds since Jan 1 1970 UTC overflows in year 2554
+	point uint64
+
+	// any binary data XXX size limitation?????????
+	data []byte
+}
 
 // Encode takes data + routing attributes and returns a byte slice with header and footer
 //  data, replication factor 0-3, priority 0-3, nanoseconds since epoch, and time accuracy 0-3
@@ -81,4 +101,7 @@ func Encode(data []byte, enc int, repl int, pri int, point uint64, acc int) ([]b
 	event[3] = byte(crc)
 
 	return event, nil
+}
+
+func Decode([]byte) ([]byte, error) {
 }
