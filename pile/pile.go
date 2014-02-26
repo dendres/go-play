@@ -14,17 +14,15 @@ the "event" layout is:
 * event[len(event)-1:] EOE=0xFF
 
 pile.Append() Appends to the file
-pile.Read() Returns a [][]byte of sorted events
-
-XXXXXXXXXXXXXXXX need refactor for single Pile type!!!!!
+pile.Read() Returns a List of events from the file
 
 */
 
 package pile
 
 import (
+	"container/list"
 	"fmt"
-	"io"
 	"os"
 )
 
@@ -33,10 +31,10 @@ const headerfootersize = 17
 
 // A Pile is an interface to an append-only file with weak guarantees about ordering, duplication, and syncing.
 type Pile struct {
-	path string
+	path   string
 	writer *os.File
-	op   string // last operation attempted
-	err  error  // last error received
+	op     string // last operation attempted
+	err    error  // last error received
 }
 
 // Finish fsyncs and closes the file.
@@ -56,8 +54,9 @@ func (p *Pile) Error() error {
 // NewPile creates the file at path if it is missing, then opens it and returns a Pile.
 // it does NOT create parent directories
 func NewPile(path string) (*Pile, error) {
-	p := &Pile{path}
-	p.file, p.err = os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	p := new(Pile)
+	p.path = path
+	p.writer, p.err = os.OpenFile(p.path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if p.err != nil {
 		p.op = "New"
 		return p, p.Error()
@@ -65,40 +64,59 @@ func NewPile(path string) (*Pile, error) {
 	return p, nil
 }
 
-// Write appends event []byte to the end of the file and advances the fd offset.
+// Append adds event []byte to the end of the file and advances the fd offset.
 // It does not validate any part of the event.
 // It does not fsync or close the file.
 // File.Write loops forever to prevent short write, so no need to check for short write here.
-func (w *Writer) Write(event []byte) (int, error) {
-	_, w.err = w.file.Write(event)
-	if w.err != nil {
-		w.op = "Write Write"
-		return 0, w.Error()
+func (p *Pile) Append(event []byte) error {
+	p.op = "Append"
+	_, p.err = p.writer.Write(event)
+	if p.err != nil {
+		return p.Error()
 	}
+	return nil
 }
 
-// XXX remove file related info... only needed in Sort()
-type Nexter struct {
-	path     string
+// Read reads all events in a file onto the given List.
+func Read(p *Pile, events *list.List) error {
+	var reader *os.File
+	reader, p.err = os.Open(p.path)
+	if p.err != nil {
+		p.op = "Read Open"
+		return p.Error()
+	}
 
-	op       string
-	err      error
-	offset   int
-	events   [][]byte // ~ 64MB of sorted events
-	eheader  []byte   // buffer containing the last event header read
-	elength  int      // the length value from the header of the last event to be read
+	event_header := make([]byte, headersize, headersize)
+	data_size := int(0)
+
+	for i := 0; i < 2147483647; i++ {
+		_, p.err = reader.Read(event_header)
+		if p.err != nil {
+			p.op = "Read Header"
+			return p.Error()
+		}
+
+		data_size = 0
+		data_size |= int(event_header[13]) << 16
+		data_size |= int(event_header[14]) << 8
+		data_size |= int(event_header[15]) << 0
+
+		event_remainder := make([]byte, data_size+1)
+
+		_, p.err = reader.Read(event_remainder)
+		if p.err != nil {
+			p.op = "Read Event"
+			return p.Error()
+		}
+
+		event := append(event_header, event_remainder...)
+		//make([]byte, len(event_header)+data_size+1)
+		events.PushBack(event)
+	}
+	return nil
 }
 
-// Sort reads all events in the file, sorts them by time, and returns a Nexter.
-// path is parsed to allow some of the high order time bytes to be ignored.
-func Sort(path string) (*Nexter, error) {
-	n := &Nexter{path}
-	eheader = make([]byte, headersize, headersize)
-
-
-	file     *os.File
-	fileinfo *os.FileInfo
-	filesize int
+/*
 
 
 	n.fileinfo, n.err := f.Stat()
@@ -109,40 +127,8 @@ func Sort(path string) (*Nexter, error) {
 	n.filesize = n.fileinfo.Size()
 
 
-	n.file, n.err = os.Open(path)
-	if n.err != nil {
-		n.op = "New"
-		return n, n.Error()
-	}
 
-	for n.offset < n.filesize {
-		// read header
-		// read whole event including 0xFF
-		// increment offset by 
 
-	return n, nil
-}
-
-// Next returns 1 event at a time and advances the offset.
-func (n *Nexter) Next() error {
-
-	_, n.err = n.file.Read(n.header)
-	if n.err != nil {
-		n.op = "Read Header"
-		return n.Error()
-	}
-
-	n.elength = int(n.header[13:15])
-
-	buf := make([]byte, n.elength)
-	_, n.err = n.file.Read()
-	if n.err != nil {
-		n.op = "Read Header"
-		return n.Error()
-	}
-}
-
-/*
 filesystem optimization for Append:
 http://kernelnewbies.org/Ext4
 https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout
@@ -213,78 +199,3 @@ EIO: A low-level I/O error occurred while modifying the inode.
 // 	}
 // 	return nil
 // }
-
-/*
-2 byte size. 64K max element.
-
-NewWriter
-Writer
- Write
-
-NewPile
-
-Next
-
-
-methods:
-* append([]byte)
-* read(offset)
-* scan()
-* reverse()
-* recover()
-* recovergzip()
-*/
-
-/*
-s := NewStore
-event := s.Next()
-
-
-
-*/
-
-/*
-store.Append(b []byte)
-* offset = os.Seek(0, 2) // EOF
-* os.Write(len(b))
-* os.Write([]byte)
-* return offset // new id for the event if needed
-*/
-
-/*
-store.Read(id int64)
-* os.Seek(id, 0) // seek to the offset given by id
-* l := make([]byte, 2)
-* os.Read(l)
-* event_length := int(l)
-* e := make([]byte, event_length)
-* os.Seek(2,1)
-* os.Read(e)
-* return e
-
-*/
-
-/*
-read the whole thing out into a stream of events????
-read l, seek 2, read len(l), emit event
-repeat
-*/
-
-/*
-repair corrupt file?
- raw events... use crc32
- gzip... use the crc and length in the gzip
-
-read and discard bytes until gzip magic byte. backup 2 and read length.?????
-
-*/
-
-/*
-http://stackoverflow.com/questions/1821811/how-to-read-write-from-to-file
-
-*/
-
-func main() {
-	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	log.Println("start main")
-}
