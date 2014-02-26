@@ -109,7 +109,7 @@ func Read(p *Pile, events *list.List) error {
 			return p.Error()
 		}
 
-		event := append(event_header, event_remainder...)
+		event := append(event_header, event_remainder...) // XXX might be a lot of copy and resize operations???
 		//make([]byte, len(event_header)+data_size+1)
 		events.PushBack(event)
 	}
