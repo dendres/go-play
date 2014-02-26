@@ -16,9 +16,10 @@ keep it independent of other event content
 
 * head: 1 byte = 2 bit encoding + 2 bit replication + 2 bit priority + 2 bit time accuracy
   head[:1] = event data encoding format
-    0 = Binary
-    1 = JSON
-    2 = a single utf-8 string
+    0 = utf-8 string including json, xml, and any other text based serializations
+    1 = gzip(utf-8 string)
+    2 = Internal Binary Format
+    3 = Reserved
   head[2:3] = replication: 0 to 3
     "replication" in this context is the number of other log processing servers
     which must receive the event before the client agent is permitted to delete the local copy.
@@ -42,9 +43,9 @@ keep it independent of other event content
 * point  : 8 byte nanoseconds since unix epoch UTC overflows in year 2554
 * crc    : 4 byte crc32 checksum of the event. only checked when reading from disk.
 * length : 3 byte length of the event including 0xFF terminator. must come first so the crc can be used!
-* EOE    : 1 byte = 0xFF that will never appear in utf-8
-  together with length, the EOE provides redundant end of message detection
-  to allow recovery from file corruption
+* EOE    : 1 byte = 0xFF "end of event" that will never appear in utf-8 or any supported Binary format
+           together with length, the EOE provides redundant end of message detection
+           to allow faster recovery from file corruption
 
 XXXXXX what if everything outside the routing fields are never touched?
 
@@ -119,6 +120,46 @@ How long does a word have to be to be worth picking out for compression and sear
 * 1 extra byte (word length) is needed to store the word in the words array
 * word cost = 3 to 4 bytes more than leaving it in the line
 * benefit = ~ 1/3 of the indexing process is now finished
+
+mac: cat /usr/share/dict/words | awk '{ print length }' | sort -n  | uniq -c
+# count length
+  52 1
+ 155 2
+1351 3
+5110 4
+9987 5
+17477 6
+23734 7
+29926 8
+32380 9
+30867 10
+26010 11
+20460 12
+14937 13
+9763 14
+5924 15
+3377 16
+1813 17
+ 842 18
+ 428 19
+ 198 20
+  82 21
+  41 22
+  17 23
+   5 24
+for searchability:
+  4 to 16 seems reasonable
+  first 16 of anything longer including character encoded numbers
+    better to get a tiny false positive rate on cryptographic hash functions than to store a massive index in memory
+  remember to make an exception for ip addresses which will be a frequent search term!!!
+for tokenization:
+  sort by characters_replaced = (frequency * length)
+  or... sort only by frequency... since the character_delta is not yet known????
+
+
+
+
+
 
 
 Is there some standard for determining how much reliability is required for event delivery?

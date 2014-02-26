@@ -12,6 +12,11 @@ Analysis to complete
 pathologies of big data
 http://queue.acm.org/detail.cfm?id=156387
 
+Survey of the field:
+http://www.kuehnel.org/bachelor.pdf
+* rsyslog RELP transport???
+
+
 Anti-Goals
 ==========
 

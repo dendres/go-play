@@ -8,6 +8,47 @@ import (
 )
 
 /*
+Buck: distributed, partial, bucket sort
+* becomes kafkaesq as the query interval approaches zero
+
+AddEvent([]byte):
+* read: encoding, replication, priority, time_accuracy, point, crc, length
+* pick a random disk and write the message to it.
+
+Query(start_time, end_time):
+* for each disk, send the oldest data first
+* XXX receiving routine needs to work on the same time period from all channels!!!
+   so N disks, there are N incoming channels
+   read one event from each channel
+     sort the N received events
+     send ONLY the oldest event through to the TCP channel
+     read another event from THAT channel
+     when a channel is empty, close it or stop looping over it
+
+Implement AddEvent and Query as TCP socket listeners
+*/
+
+/*
+methods required by Query:
+
+QueryDisk(path, start_time, end_time, output_channel)
+* find end_time, then recurse directories in time order and ReadFile(path) onto 1 output channel
+
+ReadFile(path)
+* read the whole file into [][]byte
+* choose start_byte and end_byte based on time digits in "path"
+* radix_sort(start_byte, end_byte, [][]byte)
+  ram used = 2 * disk_count * file_size
+  sort iterations = end_byte - start_byte
+
+
+methods required by AddEvent:
+
+ReadEventHead
+
+*/
+
+/*
 Data Scale Estimation:
 
 event_rate_target:
@@ -56,30 +97,41 @@ Summary: 3 bytes of time + 3 bytes of checksum is the minimum required to avoid 
 */
 
 /*
-requirement:
- - throughput/efficiency should approach kafka for 10 second batching when sorted time output is irrelevant
- - for ~15min batching,with various hold down timers, throughput must also match kafka, but provide sorted output over that t\
-ime interval
- - batch size from 10 to 1024 seconds
- - hold_down timer from 10 seconds to 48 hours
+Sorting Incoming Events by "point" using all available disks equally
+* do a partial sort across N disks in ./disks/N/
+* bucket interval is NOT determined at write time.
+  consumers may request any interval.
+  only certain intervals will be available.
+  a completeness probability can be assigned to each interval as of the query time.
 
- - reliability from random server choice during replication with replica_count
-*/
+ and do the sorts separately on each disk.
+ - keep the full time directory tree on each disk, but put less files in it!
+   this makes less splits on each disk! ... and probably warrants more pre-allocation of directories?
 
-/*
+need a way to map ./time/ss... onto ./disk1/timess...
+  or some other way to spread disk access across more than one disk
+
+
+  XXXX 90% of incoming goes to the same interval_id...
+   right????? this is the basis of the VFS cache optimization
+   so why try to spread it across disks???
+    because it speeds up the disk io when writes are required!!!
+
+
+calculate file size based on radix_sort memory requirements
+Assume there are multiple incoming sorts and multiple outgoing sorts
+* m1.medium = 3.7, 1x410: 2 * 1 * 64 = 128: 15 simultaenous sorts in 1/2 of available ram
+* m1.large  = 7.5, 2x420: 2 * 2 * 64 = 256: 15 " "
+* m1.xlarge = 15,  4x420: 2 * 4 * 64 = 512: 15 " "
+
+
+
 Deduplicate Events on READ, NOT WRITE:
 * accept the 3x event count in intermediate store files
 * stip high order bits from key on write (high order bits are stored in the file name)
 * split on fixed file size
 * sort and remove duplicates in memory on split when reading the keys into memory
 * ensure that in-memory sort structure takes up less than N x 4096 blocks in the fs cache
-
-
-the token frequency analysis purposes:
-* identify bucket/time/ss containing the token for retrieval from long term storage
-* sort tokens for decompression
-* I don't think either of these is a huge problem if it's 1/3 duplication!!!!!!!!!!!!!
-* so only try to deduplicate if it's cheap or necessary (like at freeze time when events can be statically sorted.)
 
 
 splitting tree on FS:
@@ -96,14 +148,6 @@ bucket/time/ss
 * 12 days / 1024 x 17min intervals
 
 bucket/time/sss/sss/ssc/ccc/rrr/ccc
-
-XXXXXXXXXXXXXXXXXXXXX have to divide buckets among available disks
-need to keep a mapping for this!!!
-but not too durable because it's not super hard to rebuild from the directory listing
-map[timess] = root path where it can be found like buckets/disk1
-   so the full path becomes buckets/disk1/time/ss or buckets/disk1/timess  because it's 48 hours of stuff and year is never going to matter!!!!! ??????????????
-
-
 
 fixed file size to balance split rate vs. file scan time. vs. memory pressure:
 * 500K * 512 byte events/second = 244MB/second = 20TB/day
@@ -123,12 +167,22 @@ Message count and size estimates for a fixed 128MB file:
 if there is no fsync, then writes can be re-ordered:
 * redundancy inserted over a large time range should cover this
 
+
+
+
 multiple processes appending??????
 * one goroutine per open file with a fixed size buffered channel for incoming messages
 * pushes back to the tcp listener that blocks
 * pushes back to the udp listener that drops
 * one receive channel for all incoming events
 * this goroutine has an in-memory map of channels to open file processors and it sorts to channel????
+
+the token frequency analysis purposes:
+* identify bucket/time/ss containing the token for retrieval from long term storage
+* sort tokens for decompression
+* I don't think either of these is a huge problem if it's 1/3 duplication!!!!!!!!!!!!!
+* so only try to deduplicate if it's cheap or necessary (like at freeze time when events can be statically sorted.)
+
 
 
 write:

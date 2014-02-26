@@ -4,6 +4,8 @@ import "fmt"
 
 // SortWords does a radix sort by the the "bytes" most significant bytes in each word.
 // The input slice is modified in place.
+// XXX update to specify start and end bytes
+//   to allow sorting by arbitrary length and arbitrary offset into the []byte!!!
 func SortWords(bytes int, input [][]byte) error {
 	if bytes < 1 {
 		return fmt.Errorf("cannot sort by no words: bytes = %d", bytes)
