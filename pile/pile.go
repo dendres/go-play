@@ -136,6 +136,7 @@ http://digital-forensics.sans.org/blog/2010/12/20/digital-forensics-understandin
 http://www.youtube.com/watch?v=WRAKFG1xqxA  class about the vfs cache etc...
 http://www.thomas-krenn.com/en/wiki/Linux_Page_Cache_Basics
 http://www.westnet.com/~gsmith/content/linux-pdflush.htm
+http://superuser.com/questions/479379/how-long-can-file-system-writes-be-cached-with-ext4
 
 
 filesystem optimization for Read:

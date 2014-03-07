@@ -9,13 +9,23 @@ import (
 
 /*
 Buck: distributed, partial, bucket sort
-* becomes kafkaesq as the query interval approaches zero
+* becomes kafkaesq when the query interval is inside one bucket and read sort is disabled
+
 
 AddEvent([]byte):
 * read: encoding, replication, priority, time_accuracy, point, crc, length
 * pick a random disk and write the message to it.
 
+
 Query(start_time, end_time):
+* send all data from all disks in the time range
+* expect duplicates
+* divide the interval into buckets. make a list of the buckets in time order
+* for each bucket in bucket_list:
+    for each disk:
+      read all events into the requester's channel
+
+QuerySort(start_time, end_time):
 * for each disk, send the oldest data first
 * XXX receiving routine needs to work on the same time period from all channels!!!
    so N disks, there are N incoming channels
@@ -50,6 +60,29 @@ ReadEventHead
 
 /*
 Sorting Incoming Events by "point" using all available disks equally
+
+find the filehandle to write to for each incoming event based on the 8 byte time.
+there's a tree of files... some of which have open handles, some need split, some need handles opened
+any number of handles can be open at the same time, but they should timeout and close with no additional writes
+
+
+convert time to an array of base 32 characters.
+traverse prefix tree by character till end_node is reached.
+send file to channel at end_node
+
+handle splits????
+* writer has event_channel and split_channel
+* writer sends True on split_channel when it's ready to split
+
+https://github.com/timtadh/data-structures
+
+
+
+
+
+
+
+
 * do a partial sort across N disks in ./disks/N/
 * bucket interval is NOT determined at write time.
   consumers may request any interval.
@@ -75,7 +108,6 @@ Assume there are multiple incoming sorts and multiple outgoing sorts
 * m1.medium = 3.7, 1x410: 2 * 1 * 64 = 128: 15 simultaenous sorts in 1/2 of available ram
 * m1.large  = 7.5, 2x420: 2 * 2 * 64 = 256: 15 " "
 * m1.xlarge = 15,  4x420: 2 * 4 * 64 = 512: 15 " "
-
 
 
 Deduplicate Events on READ, NOT WRITE:
@@ -360,6 +392,26 @@ choose specialized data structures for the following purposes:
 
 
 
+*/
+
+/*
+use sendfile(2) to write incoming data to disk????
+bucket becomes static 1 second barrier
+incoming data written to 1 file
+when that file is too large, it is moved out of the way and a new one is created
+then a separate process reads, sorts, and writes to a more granular tree
+
+* client appends into 1 second buckets
+* server reads X bytes of time second stamp, converts to path, and opens FD for corresponding bucket file
+* server does sendfile(client_tcp, bucket_file_fd)
+
+500k events/second
+files grow too large immediately and have to be read and sorted.
+
+XXXX disk I/O is going to be way more expensive then memory copies
+that allow the sort to happen generically regardless of incoming data rate.
+
+XXXX so abandon the idea of sendfile(2) to receive incoming files
 */
 
 /*
