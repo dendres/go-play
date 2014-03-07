@@ -1,10 +1,7 @@
-package main
+package drip
 
 import (
-	"bufio"
-	"io"
-	"log"
-	"os/exec"
+	"fmt"
 )
 
 /*
@@ -212,6 +209,5 @@ repair corrupt file?
 */
 
 func main() {
-	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	log.Println("start main")
+	fmt.Println("start")
 }

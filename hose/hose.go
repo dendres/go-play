@@ -1,7 +1,8 @@
-package main
+package hose
 
 import (
 	"fmt"
+	"github.com/dendres/go-play/event"
 )
 
 // the static entries count must match the encoding of each character in path
@@ -55,6 +56,11 @@ func (node *Node) Search(id []byte) (*Node, []byte) {
 	return next_node, remainder
 }
 
+// func (node *Node) Delete() {
+//     get parent
+//     replace entry in parent with new empty node???
+// }
+
 func main() {
 	root := Node{IsRoot: true, HasChildren: true}
 	id := []byte{0x01, 0x02, 0x03}
@@ -70,4 +76,50 @@ func main() {
 	n1, r1 = root.Search(id)
 	fmt.Println("result id =", id, "found node =", n1, "remainder =", r1)
 
+}
+
+type Hose struct {
+	root   *Node
+	events chan *EventBytes // events to route
+	splits chan *Node       // the node to split
+}
+
+// search starting at the root node
+// find the most specific drip available
+// send the event on that channel
+func (hose *Hose) Route(eb *EventBytes) {
+	point := eb.PointBytes()
+	node := hose.root.Search(point)
+	// determine if there is a drip available here!!!?????
+	// make the Drip type!!!!
+	node.Channel <- event
+}
+
+// close the drip's channel so it can sync and exit
+// mv the old file out of the way and mkdir
+// replace the writer's node with one that indicates it's a directory
+func (hose *Hose) Split(point []byte) {
+
+}
+
+/*
+keeps a prefix tree of channels to drip goroutines
+sends each incoming event to the correct drip
+
+watches a split channel that any writer can send to.
+pauses event processing and updates the prefix tree when a split is received
+
+*/
+func (hose *Hose) Run() error {
+	fmt.Println("starting hose")
+	for {
+		// XXX implement priority here with case high, then case high med, then case high med low
+		select {
+		case event := <-hose.events:
+			hose.Route(event)
+		case point_to_split := <-splits:
+			hose.Split(point_to_split)
+		}
+	}
+	return nil
 }

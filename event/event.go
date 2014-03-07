@@ -56,6 +56,12 @@ func (e *EventBytes) EOE() int {
 	return int(e.b[len(e.b)-1])
 }
 
+// PointBytes returns a slice of the 8 bytes of the uint64 event point.
+// This is used for fast access routing and writing.
+func (e *EventBytes) PointBytes() []byte {
+	return e.b[5:12]
+}
+
 // Point returns the event time as a uint64 nanoseconds since unix epoch.
 func (e *EventBytes) Point() (p uint64) {
 	p |= uint64(e.b[5]) << 56
