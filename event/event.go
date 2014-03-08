@@ -19,9 +19,30 @@ crc + data_length + EOE in serialization provides a high probability of detectin
 and allows for several variations and optimizations depending on the data in hand.
 */
 
+const headersize = 16
+const headerfootersize = 17
+
+// NewEventHeaderBuffer returns a byte slice sized for reading the event header.
+func NewEventHeaderBuffer() []byte {
+	return make([]byte, headersize, headersize)
+}
+
+// ReadDataLength reads the length bytes from the provided byte slice and updates the provided *int.
+func ReadDataLength(b []byte, l *int) {
+	*l = 0
+	*l |= int(b[13]) << 16
+	*l |= int(b[14]) << 8
+	*l |= int(b[15]) << 0
+}
+
 // An EventBytes is a byte slice of the encoded event including header and footer
 type EventBytes struct {
 	b []byte
+}
+
+// Bytes returns the whole event byte slice.
+func (e *EventBytes) Bytes() []byte {
+	return e.b
 }
 
 // Crc returns the 4 byte IEEE crc32 as an int.
@@ -233,9 +254,7 @@ func Decode(event []byte) (*Event, error) {
 	}
 
 	data_length := int(0)
-	data_length |= int(event[13]) << 16
-	data_length |= int(event[14]) << 8
-	data_length |= int(event[15])
+	ReadDataLength(event, &data_length)
 
 	// read the data
 	e.data = event[16 : 16+data_length]

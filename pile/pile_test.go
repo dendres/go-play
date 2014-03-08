@@ -3,7 +3,6 @@ package pile
 import (
 	"os"
 	"strconv"
-
 	"testing"
 	"time"
 )

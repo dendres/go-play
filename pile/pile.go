@@ -5,29 +5,18 @@ package pile implements an append-only file that rarely calls fsync(2).
 the OS chooses when to flush pages to disk
 the page flush rate increases with memory pressure and IO load.
 
-the "event" layout is:
-* event[0:3] crc of event[4:]
-* event[4] header of 4x 2 bit routing values
-* event[5:12] time ns since unix epoch
-* event[13:15] length of data not including EOE=0xFF
-* event[16:len(event)-1] data (DO NOT READ)
-* event[len(event)-1:] EOE=0xFF
-
-pile.Append() Appends to the file
-pile.Read() Returns a List of events from the file
+# XXX use the Event and EventByte Types!!!!!
 
 */
-
 package pile
 
 import (
 	"container/list"
 	"fmt"
+	"github.com/dendres/go-play/event"
+	"io"
 	"os"
 )
-
-const headersize = 16
-const headerfootersize = 17
 
 // A Pile is an interface to an append-only file with weak guarantees about ordering, duplication, and syncing.
 type Pile struct {
@@ -68,9 +57,9 @@ func NewPile(path string) (*Pile, error) {
 // It does not validate any part of the event.
 // It does not fsync or close the file.
 // File.Write loops forever to prevent short write, so no need to check for short write here.
-func (p *Pile) Append(event []byte) error {
+func (p *Pile) Append(eb *event.EventBytes) error {
 	p.op = "Append"
-	_, p.err = p.writer.Write(event)
+	_, p.err = p.writer.Write(eb.Bytes())
 	if p.err != nil {
 		return p.Error()
 	}
@@ -86,23 +75,23 @@ func Read(p *Pile, events *list.List) error {
 		return p.Error()
 	}
 
-	event_header := make([]byte, headersize, headersize)
-	data_size := int(0)
+	event_header := event.NewEventHeaderBuffer()
+	data_length := int(0)
 
-	for i := 0; i < 2147483647; i++ {
+	for {
 		_, p.err = reader.Read(event_header)
+		if p.err == io.EOF {
+			break
+		}
 		if p.err != nil {
 			p.op = "Read Header"
 			return p.Error()
 		}
 
-		data_size = 0
-		data_size |= int(event_header[13]) << 16
-		data_size |= int(event_header[14]) << 8
-		data_size |= int(event_header[15]) << 0
+		event.ReadDataLength(event_header, &data_length)
 
-		event_remainder := make([]byte, data_size+1)
-
+		// event_remainder is a different size each event so the slice cannot be reused
+		event_remainder := make([]byte, data_length+1)
 		_, p.err = reader.Read(event_remainder)
 		if p.err != nil {
 			p.op = "Read Event"
@@ -110,23 +99,18 @@ func Read(p *Pile, events *list.List) error {
 		}
 
 		event := append(event_header, event_remainder...) // XXX might be a lot of copy and resize operations???
-		//make([]byte, len(event_header)+data_size+1)
 		events.PushBack(event)
 	}
 	return nil
 }
 
 /*
-
-
 	n.fileinfo, n.err := f.Stat()
 	if err != nil {
 		n.op = "Stat"
 		return n, n.Error()
 	}
 	n.filesize = n.fileinfo.Size()
-
-
 
 
 filesystem optimization for Append:
