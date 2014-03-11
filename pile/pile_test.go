@@ -1,6 +1,7 @@
 package pile
 
 import (
+	"github.com/dendres/go-play/event"
 	"os"
 	"strconv"
 	"testing"
@@ -46,7 +47,7 @@ func TestAll(t *testing.T) {
 	p := newTestPile(t)
 	t.Log("p = ", p)
 
-	x := []byte{0x31, 0x32, 0x33}
+	x := event.EventBytes{[]byte{0x31, 0x32, 0x33}}
 
 	err = p.Append(x)
 	if err != nil {
