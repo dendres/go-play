@@ -1,12 +1,8 @@
 /*
-package pile implements an append-only file that rarely calls fsync(2).
-"events" with a very specific layout are written to the file.
-"events" are not guaranteed to be written in the order received.
-the OS chooses when to flush pages to disk
+package pile appends and reads EventBytes while rarely calling fsync(2).
+the OS chooses when to flush pages to diks
 the page flush rate increases with memory pressure and IO load.
-
-# XXX use the Event and EventByte Types!!!!!
-
+"events" are not guaranteed to be written in the order received.
 */
 package pile
 
@@ -59,7 +55,7 @@ func NewPile(path string) (*Pile, error) {
 // File.Write loops forever to prevent short write, so no need to check for short write here.
 func (p *Pile) Append(eb *event.EventBytes) error {
 	p.op = "Append"
-	_, p.err = p.writer.Write(eb.Bytes())
+	_, p.err = p.writer.Write(eb.GetBytes())
 	if p.err != nil {
 		return p.Error()
 	}
@@ -75,8 +71,8 @@ func Read(p *Pile, events *list.List) error {
 		return p.Error()
 	}
 
+	// event_header is fixed length, so it can be reused
 	event_header := event.NewEventHeaderBuffer()
-	data_length := int(0)
 
 	for {
 		_, p.err = reader.Read(event_header)
@@ -88,17 +84,21 @@ func Read(p *Pile, events *list.List) error {
 			return p.Error()
 		}
 
-		event.ReadDataLength(event_header, &data_length)
+		var event_remainder []byte
+		event_remainder, p.err = event.NewEventRemainderBuffer(event_header)
+		if p.err != nil {
+			p.op = "New Event Remainder buffer"
+			return p.Error()
+		}
 
-		// event_remainder is a different size each event so the slice cannot be reused
-		event_remainder := make([]byte, data_length+1)
 		_, p.err = reader.Read(event_remainder)
 		if p.err != nil {
+			// if EOF or any read error appears while trying to read an event, the caller is expected to retry??
 			p.op = "Read Event"
 			return p.Error()
 		}
 
-		event := append(event_header, event_remainder...) // XXX might be a lot of copy and resize operations???
+		event := event.NewEventFromBuffers(event_header, event_remainder)
 		events.PushBack(event)
 	}
 	return nil

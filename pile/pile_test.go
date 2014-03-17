@@ -47,9 +47,20 @@ func TestAll(t *testing.T) {
 	p := newTestPile(t)
 	t.Log("p = ", p)
 
-	x := event.EventBytes{[]byte{0x31, 0x32, 0x33}}
+	e1 := event.Event{
+		Enc:   0,
+		Repl:  0,
+		Pri:   0,
+		Acc:   2,
+		Point: event.Point(time.Now()),
+		Data:  []byte("hello there"),
+	}
+	eb1, err := e1.Encode()
+	if err != nil {
+		t.Fatal("Encoding error:", err)
+	}
 
-	err = p.Append(x)
+	err = p.Append(eb1)
 	if err != nil {
 		t.Fatal("error appending:", err)
 	}

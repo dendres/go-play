@@ -4,6 +4,7 @@ package event
 import (
 	"fmt"
 	"hash/crc32"
+	"time"
 )
 
 /*
@@ -28,7 +29,7 @@ thing.Read(eb)
 
 XXX Don't implement this here because retry and error handling process may not be the same for all Readers!?!?!
 
-
+XXX appologies for the jumbled mess here
 */
 
 const EOE = byte(0xFF)
@@ -56,11 +57,35 @@ func DataLengthFromHeader(header []byte) (int, error) {
 	return data_length, nil
 }
 
+func NewEventRemainderBuffer(header []byte) ([]byte, error) {
+	dl, err := DataLengthFromHeader(header)
+	if err != nil {
+		return []byte{0}, err
+	}
+	// add 1 for the EOE = 0xFF at the end of the message
+	return make([]byte, dl+1), nil
+}
+
 // An EventBytes is a byte slice of the encoded event including header and footer.
 // Getter and Setter methods are provided for each encoded object.
 // bytes is protected to ensure it meets the minimum length requirement.
 type EventBytes struct {
 	bytes []byte
+}
+
+// NewEventFromBuffers appends 2 []byte and returns a new EventBytes
+func NewEventFromBuffers(event_header []byte, event_remainder []byte) *EventBytes {
+	event_bytes := make([]byte, len(event_header)+len(event_remainder))
+
+	for i := 0; i < len(event_header); i++ {
+		event_bytes[i] = event_header[i]
+	}
+
+	for i := 0; i < len(event_remainder); i++ {
+		event_bytes[i+HeaderSize] = event_remainder[i]
+	}
+
+	return &EventBytes{event_bytes}
 }
 
 // NewEventBytes creates a new EventBytes from the given []byte if it is large enough.
@@ -320,6 +345,25 @@ type Event struct {
 
 	// any binary data XXX size limitation?????????
 	Data []byte
+}
+
+// Point takes a time.Time and returns uint64 nanoseconds since unix epoch
+// similar to time.UnixNano(), but unsigned!
+// overflow:
+//   human = 2554-07-21 23:34:33.709551615 +0000 UTC
+//   point = 18446744073709551615
+//   unix  = 18446744073
+func Point(t time.Time) uint64 {
+	sec := uint64(t.Unix())
+	nsec := uint64(t.Nanosecond())
+	return (sec * 1e9) + nsec
+}
+
+// Time converts a uint64 nanoseconds since unix epoch to time.Time.
+func Time(point uint64) time.Time {
+	sec := int64(point / 1e9)
+	nsec := int64(point - (point / 1e9 * 1e9))
+	return time.Unix(sec, nsec)
 }
 
 // Encode the Event and return the new EventBytes.
