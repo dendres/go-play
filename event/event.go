@@ -237,14 +237,6 @@ func (e *EventBytes) SetPoint(p uint64) {
 	e.bytes[12] = byte(p)
 }
 
-// CheckEOE reads the last byte of the message and returns true if it is 0xFF
-func (e *EventBytes) CheckEOE() bool {
-	if e.GetEOE() == EOE {
-		return true
-	}
-	return false
-}
-
 // GetEncoding returns the event encoding format 0-3 as an int.
 func (e *EventBytes) GetEncoding() int {
 	return int(e.bytes[4]) >> 6 & 0x03
@@ -255,7 +247,19 @@ func (e *EventBytes) SetEncoding(encoding int) error {
 	if encoding < 0 || encoding > 3 {
 		return fmt.Errorf("encoding must be 0 to 3, not %d", encoding)
 	}
-	e.bytes[4] |= byte(encoding << 6)
+	if encoding == 0 {
+		e.bytes[4] &^= byte(1 << 7)
+		e.bytes[4] &^= byte(1 << 6)
+	} else if encoding == 1 {
+		e.bytes[4] &^= byte(1 << 7)
+		e.bytes[4] |= byte(1 << 6)
+	} else if encoding == 2 {
+		e.bytes[4] |= byte(1 << 7)
+		e.bytes[4] &^= byte(1 << 6)
+	} else {
+		e.bytes[4] |= byte(1 << 7)
+		e.bytes[4] |= byte(1 << 6)
+	}
 	return nil
 }
 
@@ -269,7 +273,19 @@ func (e *EventBytes) SetReplication(replication int) error {
 	if replication < 0 || replication > 3 {
 		return fmt.Errorf("replication must be 0 to 3, not %d", replication)
 	}
-	e.bytes[4] |= byte(replication << 4)
+	if replication == 0 {
+		e.bytes[4] &^= byte(1 << 5)
+		e.bytes[4] &^= byte(1 << 4)
+	} else if replication == 1 {
+		e.bytes[4] &^= byte(1 << 5)
+		e.bytes[4] |= byte(1 << 4)
+	} else if replication == 2 {
+		e.bytes[4] |= byte(1 << 5)
+		e.bytes[4] &^= byte(1 << 4)
+	} else {
+		e.bytes[4] |= byte(1 << 5)
+		e.bytes[4] |= byte(1 << 4)
+	}
 	return nil
 }
 
@@ -283,7 +299,19 @@ func (e *EventBytes) SetPriority(priority int) error {
 	if priority < 0 || priority > 3 {
 		return fmt.Errorf("priority must be 0 to 3, not %d", priority)
 	}
-	e.bytes[4] |= byte(priority << 2)
+	if priority == 0 {
+		e.bytes[4] &^= byte(1 << 3)
+		e.bytes[4] &^= byte(1 << 2)
+	} else if priority == 1 {
+		e.bytes[4] &^= byte(1 << 3)
+		e.bytes[4] |= byte(1 << 2)
+	} else if priority == 2 {
+		e.bytes[4] |= byte(1 << 3)
+		e.bytes[4] &^= byte(1 << 2)
+	} else {
+		e.bytes[4] |= byte(1 << 3)
+		e.bytes[4] |= byte(1 << 2)
+	}
 	return nil
 }
 
@@ -296,7 +324,19 @@ func (e *EventBytes) SetTimeAccuracy(ta int) error {
 	if ta < 0 || ta > 3 {
 		return fmt.Errorf("time accuracy must be 0 to 3, not %d", ta)
 	}
-	e.bytes[4] |= byte(ta)
+	if ta == 0 {
+		e.bytes[4] &^= byte(1 << 1)
+		e.bytes[4] &^= byte(1 << 0)
+	} else if ta == 1 {
+		e.bytes[4] &^= byte(1 << 1)
+		e.bytes[4] |= byte(1 << 0)
+	} else if ta == 2 {
+		e.bytes[4] |= byte(1 << 1)
+		e.bytes[4] &^= byte(1 << 0)
+	} else {
+		e.bytes[4] |= byte(1 << 1)
+		e.bytes[4] |= byte(1 << 0)
+	}
 	return nil
 }
 
@@ -366,6 +406,11 @@ func Time(point uint64) time.Time {
 	return time.Unix(sec, nsec)
 }
 
+func (e *Event) String() string {
+	return fmt.Sprintf("enc:%d, repl:%d, pri:%d, acc:%d, point:%v, data:%s",
+		e.Enc, e.Repl, e.Pri, e.Acc, Time(e.Point), string(e.Data))
+}
+
 // Encode the Event and return the new EventBytes.
 func (e *Event) Encode() (*EventBytes, error) {
 	eb := &EventBytes{make([]byte, HeaderFooterSize+len(e.Data))}
@@ -386,17 +431,17 @@ func (e *Event) Encode() (*EventBytes, error) {
 		return eb, err
 	}
 
-	err = eb.SetReplication(e.Enc)
+	err = eb.SetReplication(e.Repl)
 	if err != nil {
 		return eb, err
 	}
 
-	err = eb.SetPriority(e.Enc)
+	err = eb.SetPriority(e.Pri)
 	if err != nil {
 		return eb, err
 	}
 
-	err = eb.SetTimeAccuracy(e.Enc)
+	err = eb.SetTimeAccuracy(e.Acc)
 	if err != nil {
 		return eb, err
 	}

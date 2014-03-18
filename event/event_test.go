@@ -16,6 +16,12 @@ func TestNewEventHeaderBuffer(t *testing.T) {
 	}
 }
 
+// XXX TestDataLengthFromHeader
+
+// XXX TestNewEventRemainderBuffer
+
+// XXX TestNewEventFromBuffers
+
 func TestNewEventBytes(t *testing.T) {
 	b1 := []byte{0x01}
 	_, err := NewEventBytes(b1)
@@ -35,6 +41,8 @@ func TestNewEventBytes(t *testing.T) {
 		t.Fatalf("NewEventBytes must allow a length with 1 byte of data, but instead it gave error = %v", err)
 	}
 }
+
+// XXX TestGetBytes
 
 type DataCase struct {
 	Data []byte
@@ -79,6 +87,8 @@ func TestGetSetData(t *testing.T) {
 	}
 }
 
+// XXX TestGetSetDataLength
+
 type CRCase struct {
 	Expected uint32
 	Data     []byte
@@ -121,6 +131,77 @@ func TestGetSetCRC(t *testing.T) {
 
 	for _, c := range cases {
 		c.Run(t)
+	}
+}
+
+// XXX TestGetSetEOE
+
+// XXX TestGetSetPointBytes
+
+// XXX TestGetSetPoint
+
+func TestGetSetEncoding(t *testing.T) {
+	b := make([]byte, HeaderFooterSize)
+
+	eb, err := NewEventBytes(b)
+	if err != nil {
+		t.Fatalf("error making new EventBytes:", err)
+	}
+
+	encs := []int{0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 1, 2, 2, 3}
+	repls := []int{0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 1, 2, 2, 3}
+	pris := []int{0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 1, 2, 2, 3}
+	accs := []int{0, 1, 2, 3, 3, 2, 1, 0, 0, 1, 1, 2, 2, 3}
+
+	for _, e := range encs {
+		for _, r := range repls {
+			for _, p := range pris {
+				for _, a := range accs {
+
+					err = eb.SetEncoding(e)
+					if err != nil {
+						t.Fatalf("error setting encoding:", err)
+					}
+
+					err = eb.SetReplication(r)
+					if err != nil {
+						t.Fatalf("error setting replication:", err)
+					}
+
+					err = eb.SetPriority(p)
+					if err != nil {
+						t.Fatalf("error setting priority:", err)
+					}
+
+					err = eb.SetTimeAccuracy(a)
+					if err != nil {
+						t.Fatalf("error setting time accuracy:", err)
+					}
+
+					// t.Logf("header = %b", eb.GetBytes()[4])
+
+					enc := eb.GetEncoding()
+					if enc != e {
+						t.Fatalf("expected encoding to be %d, but got %d", e, enc)
+					}
+
+					repl := eb.GetReplication()
+					if repl != r {
+						t.Fatalf("expected replication to be %d, but got %d", r, repl)
+					}
+
+					pri := eb.GetPriority()
+					if pri != p {
+						t.Fatalf("expected priority to be %d, but got %d", p, pri)
+					}
+
+					acc := eb.GetTimeAccuracy()
+					if acc != a {
+						t.Fatalf("expected time accuracy to be %d, but got %d", a, acc)
+					}
+				}
+			}
+		}
 	}
 }
 

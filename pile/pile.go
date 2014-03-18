@@ -7,7 +7,6 @@ the page flush rate increases with memory pressure and IO load.
 package pile
 
 import (
-	"container/list"
 	"fmt"
 	"github.com/dendres/go-play/event"
 	"io"
@@ -62,8 +61,8 @@ func (p *Pile) Append(eb *event.EventBytes) error {
 	return nil
 }
 
-// Read reads all events in a file onto the given List.
-func Read(p *Pile, events *list.List) error {
+// Read up to len(events) events from the file.
+func (p *Pile) Read(events []*event.EventBytes) error {
 	var reader *os.File
 	reader, p.err = os.Open(p.path)
 	if p.err != nil {
@@ -74,7 +73,7 @@ func Read(p *Pile, events *list.List) error {
 	// event_header is fixed length, so it can be reused
 	event_header := event.NewEventHeaderBuffer()
 
-	for {
+	for i := 0; i < len(events); i++ {
 		_, p.err = reader.Read(event_header)
 		if p.err == io.EOF {
 			break
@@ -98,8 +97,7 @@ func Read(p *Pile, events *list.List) error {
 			return p.Error()
 		}
 
-		event := event.NewEventFromBuffers(event_header, event_remainder)
-		events.PushBack(event)
+		events[i] = event.NewEventFromBuffers(event_header, event_remainder)
 	}
 	return nil
 }
