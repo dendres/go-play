@@ -15,7 +15,7 @@ import (
 
 // A Pile is an interface to an append-only file with weak guarantees about ordering, duplication, and syncing.
 type Pile struct {
-	path   string
+	Path   string
 	writer *os.File
 	op     string // last operation attempted
 	err    error  // last error received
@@ -39,8 +39,8 @@ func (p *Pile) Error() error {
 // it does NOT create parent directories
 func NewPile(path string) (*Pile, error) {
 	p := new(Pile)
-	p.path = path
-	p.writer, p.err = os.OpenFile(p.path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	p.Path = path
+	p.writer, p.err = os.OpenFile(p.Path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if p.err != nil {
 		p.op = "New"
 		return p, p.Error()
@@ -64,7 +64,7 @@ func (p *Pile) Append(eb *event.EventBytes) error {
 // Read up to len(events) events from the file.
 func (p *Pile) Read(events []*event.EventBytes) error {
 	var reader *os.File
-	reader, p.err = os.Open(p.path)
+	reader, p.err = os.Open(p.Path)
 	if p.err != nil {
 		p.op = "Read Open"
 		return p.Error()

@@ -16,9 +16,13 @@ type Case interface {
 	Run(t *testing.T)
 }
 
-func newTestPile(t *testing.T) *Pile {
+func newTestPath() string {
 	stamp := time.Now().Nanosecond()
-	path := base_path + "/" + strconv.Itoa(stamp)
+	return base_path + "/" + strconv.Itoa(stamp)
+}
+
+func newTestPile(t *testing.T) *Pile {
+	path := newTestPath()
 	t.Log("new test path =", path)
 
 	p, err := NewPile(path)
@@ -88,7 +92,7 @@ func RandEvent() *event.Event {
 		"pieces", "of", "data", "shorter", "than", "a", "word"}
 
 	sentence := ""
-	for i := 0; i < 9; i++ {
+	for i := 0; i < len(words); i++ {
 		sentence += words[rand.Intn(len(words))] + " "
 	}
 
@@ -103,17 +107,27 @@ func RandEvent() *event.Event {
 	return &e
 }
 
-func TestWriteRead(t *testing.T) {
-	events := make([]*event.Event, 20, 40)
+// RandomEvents returns a slice of events containing pseudorandom values
+func RandomEvents(count int) []*event.Event {
+	events := make([]*event.Event, count)
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < count; i++ {
 		events[i] = RandEvent()
 	}
+	return events
+}
 
-	p := newTestPile(t)
-
-	// write the events
+// WriteEvents serializes and appends the events from the slice provided to the Pile provided.
+// on a quiet server, I have not been able to detect out of order or even disjointed writes.
+// vfs and ext4 docs suggest it is possible, so I will continue to guard against it.
+func WriteEvents(events []*event.Event, p *Pile, t *testing.T, s int) {
 	for _, e := range events {
+
+		// XXX a sleep of 1ns causes the sequential write pattern to be measurable
+		// XXX remove the sleep, and the writes seem to appear as a single write ???
+		if s > 0 {
+			time.Sleep(time.Duration(s))
+		}
 		eb, err := e.Encode()
 		if err != nil {
 			t.Fatal("Encoding error:", err)
@@ -124,9 +138,16 @@ func TestWriteRead(t *testing.T) {
 			t.Fatal("error appending:", err)
 		}
 	}
+}
 
-	// read the events
-	events2 := make([]*event.EventBytes, len(events), 40)
+// TestWriteRead Writes random events to a file, reads them from file, then decodes and verifies them.
+func TestWriteRead(t *testing.T) {
+	test_event_count := 50
+	p := newTestPile(t)
+	events := RandomEvents(test_event_count)
+	WriteEvents(events, p, t, 0)
+
+	events2 := make([]*event.EventBytes, len(events), test_event_count)
 	p.Read(events2)
 
 	for i, e := range events2 {
@@ -139,9 +160,86 @@ func TestWriteRead(t *testing.T) {
 			t.Fatalf("expected, vs got: %v, %v", event, events[i])
 		}
 	}
-
 }
 
-// XXX test 1 write and 1 read goroutine
+// try to demonstrate reading from a pile while it is being written
+func TestSequentialWriteWithSleep(t *testing.T) {
+	pile_path := newTestPath()
+	t.Log("pile_path =", pile_path)
+	test_event_count := 5
 
-// XXX test with 1 write and many read goroutines
+	go func() {
+		p1, err := NewPile(pile_path)
+		if err != nil {
+			t.Fatal("Error opening path =", pile_path, ", error =", err)
+		}
+
+		events := RandomEvents(test_event_count)
+		WriteEvents(events, p1, t, 1) // sleep 1ns between writes
+	}()
+
+	p2, err := NewPile(pile_path)
+	if err != nil {
+		t.Fatal("Error opening path =", pile_path, ", error =", err)
+	}
+
+	events2 := make([]*event.EventBytes, test_event_count)
+
+	t.Log("len(events2) and test_event_count are ", len(events2), test_event_count)
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(1) // sleep 1ns between reads
+		p2.Read(events2)
+
+		// print before all the events get written
+		if events2[0] != nil && events2[test_event_count-1] == nil {
+			t.Log("events2 =", events2)
+		}
+	}
+}
+
+func Read2(path string, count int, t *testing.T) {
+	p2, err := NewPile(path)
+	if err != nil {
+		t.Fatal("Error opening path =", path, ", error =", err)
+	}
+
+	events2 := make([]*event.EventBytes, count)
+
+	t.Log("len(events2) and test_event_count are ", len(events2), count)
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(1) // sleep 1ns between reads
+		p2.Read(events2)
+
+		if events2[0] != nil && events2[count-1] == nil {
+			t.Log("events2 =", events2)
+		}
+	}
+}
+
+// demonstrate one write goroutine and many read goroutines
+func TestMultipleReadGoroutines(t *testing.T) {
+	pile_path := newTestPath()
+	t.Log("pile_path =", pile_path)
+	test_event_count := 5
+
+	go func() {
+		p1, err := NewPile(pile_path)
+		if err != nil {
+			t.Fatal("Error opening path =", pile_path, ", error =", err)
+		}
+
+		events := RandomEvents(test_event_count)
+		WriteEvents(events, p1, t, 1) // sleep 1ns between writes
+	}()
+
+	go Read2(pile_path, test_event_count, t)
+	go Read2(pile_path, test_event_count, t)
+	go Read2(pile_path, test_event_count, t)
+	go Read2(pile_path, test_event_count, t)
+	go Read2(pile_path, test_event_count, t)
+	go Read2(pile_path, test_event_count, t)
+
+	time.Sleep(1 * time.Second)
+}
