@@ -1,14 +1,54 @@
+/*
+package drip implements Drip.
+*/
 package drip
 
 import (
 	"fmt"
+	"github.com/dendres/go-play/event"
+	"github.com/dendres/go-play/pile"
 )
 
+// A Drip listens on an EventBytes channel and, writes to a Pile.
+type Drip struct {
+
+	// the event pile
+	ep *pile.Pile
+
+	// the incoming channel of events
+	events chan<- *EventBytes
+
+	// notify Hose that it's time to split
+	split <-chan bool
+
+	// stop when the pile is larger than splitsize bytes
+	splitsize int64
+
+	// clean up and exit after this inactivity timeout in nanoseconds
+	bored int
+
+	// the last operation attempted
+	op string
+
+	// the last error encountered
+	err error
+}
+
+// Finish performs any cleanup required before exiting
+func (d *Drip) Finish() {
+	close(events)
+	d.ep.Finish()
+}
+
+// Error cleans up and returns a string representation of the error.
+func (d *Drip) Error() error {
+	b.Finish()
+	return fmt.Errorf("path = %s, op = %s, error: %s", d.ep.Path, d.op, d.err.Error())
+}
+
+// XXX rough out Hose to get the methods required
+
 /*
-drip:
-
-listen on channel, write to a single file, handle splits
-
 splitting tree on FS:
 * ideal time = 35 bit second + 30 bit ns. can reduce fractional second granularity
 * 60 bit fits in 12 lp32 characters
@@ -207,7 +247,3 @@ repair corrupt file?
  use the attributes of those protocols to seek for the first full valid event, then continue processing
 
 */
-
-func main() {
-	fmt.Println("start")
-}

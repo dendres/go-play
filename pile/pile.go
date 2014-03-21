@@ -15,10 +15,20 @@ import (
 
 // A Pile is an interface to an append-only file with weak guarantees about ordering, duplication, and syncing.
 type Pile struct {
-	Path   string
+	// the path to the file containing the offset delimited events
+	Path string
+
+	// the handle to the file
 	writer *os.File
-	op     string // last operation attempted
-	err    error  // last error received
+
+	// the approximate number of bytes in the file
+	written int64
+
+	// the last operation attempted
+	op string
+
+	// the last error received
+	err error
 }
 
 // Finish fsyncs and closes the file.
@@ -32,7 +42,18 @@ func (p *Pile) Finish() {
 // Error calls Finish() then returns an error object that shows state info
 func (p *Pile) Error() error {
 	p.Finish()
-	return fmt.Errorf("file = %s, op = %s, error: %s", p.writer.Name(), p.op, p.err.Error())
+	return fmt.Errorf("path = %s, op = %s, error: %s", p.Path, p.op, p.err.Error())
+}
+
+// Size performs a stat(2) and returns the current file size in bytes as int64
+func (p *Pile) Size() (int64, error) {
+	fi, p.err = p.writer.Stat()
+	if p.err != nil {
+		p.op = "Stat"
+		return 0, p.Error()
+	}
+
+	return fileinfo.Size(), nil
 }
 
 // NewPile creates the file at path if it is missing, then opens it and returns a Pile.
@@ -45,6 +66,12 @@ func NewPile(path string) (*Pile, error) {
 		p.op = "New"
 		return p, p.Error()
 	}
+
+	p.written, p.err = p.Size()
+	if p.err != nil {
+		return p, p.Error()
+	}
+
 	return p, nil
 }
 
@@ -54,10 +81,14 @@ func NewPile(path string) (*Pile, error) {
 // File.Write loops forever to prevent short write, so no need to check for short write here.
 func (p *Pile) Append(eb *event.EventBytes) error {
 	p.op = "Append"
-	_, p.err = p.writer.Write(eb.GetBytes())
+	b := eb.GetBytes()
+	_, p.err = p.writer.Write(b)
 	if p.err != nil {
 		return p.Error()
 	}
+
+	p.written += len(b)
+
 	return nil
 }
 
@@ -103,12 +134,6 @@ func (p *Pile) Read(events []*event.EventBytes) error {
 }
 
 /*
-	n.fileinfo, n.err := f.Stat()
-	if err != nil {
-		n.op = "Stat"
-		return n, n.Error()
-	}
-	n.filesize = n.fileinfo.Size()
 
 
 filesystem optimization for Append:
