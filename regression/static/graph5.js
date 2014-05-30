@@ -2,6 +2,7 @@
 
 // http://bl.ocks.org/mbostock/3883245
 // http://bl.ocks.org/mbostock/3884955
+// http://bl.ocks.org/benvandyke/8459843
 
 var margin = {top: 20, right: 20, bottom: 30, left: 50},
 width = 960 - margin.left - margin.right,
@@ -32,13 +33,13 @@ var svg = d3.select("body").append("svg")
   .append("g")
   .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-d3.json("points.json", function(error, data) {
-  //data.forEach(function(d) {
-  //  d.date = parseDate(d.date);
-  //  d.close = +d.close;
-  //});
+// regression.json has array of array of points
+// each set of points must be plotted... all on the same graph
+d3.json("regression.json", function(error, data) {
 
   console.log("got some data", data)
+
+  // XXX have to set x and y domain over all data sets?????
 
   x.domain(d3.extent(data, function(d) { return d.X; }));
   y.domain(d3.extent(data, function(d) { return d.Y; }));

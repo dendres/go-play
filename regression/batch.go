@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+type Point struct {
+	x float64
+	y float64
+}
+
 const NUM_SAMPLES = 5
 
 func main() {
