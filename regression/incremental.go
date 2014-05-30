@@ -14,6 +14,17 @@ type Point struct {
 	Y float64
 }
 
+type Graph struct {
+	Name             string
+	DataPoints       []Point
+	RegressionPoints []Point
+	RSquared         float64
+}
+
+type HasGraphs struct {
+	Graphs []Graph
+}
+
 func main() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
@@ -24,7 +35,7 @@ func main() {
 
 	var r stats.Regression
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 25; i++ {
 		x := float64(i) * 3.0
 		y := rand.Float64()*100.0 - 25.0 // uniform samples in {-25, 75}
 		r.Update(x, y)
@@ -49,9 +60,19 @@ func main() {
 		Point{xmax, (r.Slope() * xmax) + r.Intercept()},
 	}
 
-	all := [][]Point{points, regression}
+	hg := HasGraphs{
+		Graphs: []Graph{
+			Graph{
+				Name:             "test points",
+				DataPoints:       points,
+				RegressionPoints: regression,
+				RSquared:         r.RSquared(),
+			},
+		},
+		// then add another graph!
+	}
 
-	b, err := json.Marshal(all)
+	b, err := json.Marshal(hg)
 	if err != nil {
 		panic(err)
 	}
@@ -61,7 +82,6 @@ func main() {
 	}
 
 	fmt.Println("json=", string(b))
-
 	fmt.Println("count", r.Count())
 	fmt.Println("slope", r.Slope())
 	fmt.Println("intercept", r.Intercept())

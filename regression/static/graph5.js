@@ -5,8 +5,8 @@
 // http://bl.ocks.org/benvandyke/8459843
 
 var margin = {top: 20, right: 20, bottom: 30, left: 50},
-width = 960 - margin.left - margin.right,
-height = 500 - margin.top - margin.bottom;
+width = 500 - margin.left - margin.right,
+height = 200 - margin.top - margin.bottom;
 
 var x = d3.scale.linear()
   .range([0, width]);
@@ -22,7 +22,6 @@ var yAxis = d3.svg.axis()
   .scale(y)
   .orient("left");
 
-// d.XXXXX
 var line = d3.svg.line()
   .x(function(d) { return x(d.X); })
   .y(function(d) { return y(d.Y); });
@@ -33,16 +32,31 @@ var svg = d3.select("body").append("svg")
   .append("g")
   .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-// regression.json has array of array of points
-// each set of points must be plotted... all on the same graph
+var legend = d3.select("body").append("ul")
+  .attr("class", "legend");
+
+
+
+
 d3.json("regression.json", function(error, data) {
 
-  console.log("got some data", data)
+  console.log("error =", error)
+  console.log("data =", data)
 
-  // XXX have to set x and y domain over all data sets?????
+  var graphs = data["Graphs"];
+  var all_points = [];
 
-  x.domain(d3.extent(data, function(d) { return d.X; }));
-  y.domain(d3.extent(data, function(d) { return d.Y; }));
+  graphs.forEach(function(graph){
+    var data_points = graph["DataPoints"];
+    var regression_points = graph["RegressionPoints"];
+    all_points = d3.merge([all_points, data_points, regression_points]);
+  });
+
+  x.domain(d3.extent(all_points, function(d){return d.X}));
+  console.log("x.domain =", x.domain())
+
+  y.domain(d3.extent(all_points, function(d){return d.Y}));
+  console.log("y.domain =", y.domain())
 
   svg.append("g")
     .attr("class", "x axis")
@@ -52,16 +66,39 @@ d3.json("regression.json", function(error, data) {
   svg.append("g")
     .attr("class", "y axis")
     .call(yAxis);
-    // .append("text")
-    // .attr("transform", "rotate(-90)")
-    // .attr("y", 6)
-    // .attr("dy", ".71em")
-    // .style("text-anchor", "end")
-    // .text("Price ($)");
 
-  svg.append("path")
-    .datum(data)
-    .attr("class", "line")
-    .attr("d", line);
+  var colors = d3.scale.category10();
+  if (graphs.length > 10) {
+    colors = d3.scale.category20();
+  }
+
+  // draw all the graphs
+  for (i=0; i < graphs.length; ++i) {
+    var color = colors(i);
+    var graph = graphs[i];
+    var data_points = graph["DataPoints"];
+    var regression_points = graph["RegressionPoints"];
+    var graph_name = graph["Name"];
+
+    svg.selectAll(".dot")
+      .data(data_points)
+      .enter().append("circle")
+      .attr("r", 5)
+      .attr("cx", function(d) { return x(d.X); })
+      .attr("cy", function(d) { return y(d.Y); })
+      .attr("fill", color);
+
+    svg.append("path")
+      .datum(regression_points)
+      .attr("class", "line")
+      .attr("stroke", color)
+      .attr("d", line);
+
+    legend.append("li")
+      .text(graph_name)
+      .style("font-size", "22px")
+      .style("list-style-type", "none")
+      .style("color", color);
+  }
 });
 
