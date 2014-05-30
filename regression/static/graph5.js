@@ -79,11 +79,13 @@ d3.json("regression.json", function(error, data) {
     var data_points = graph["DataPoints"];
     var regression_points = graph["RegressionPoints"];
     var graph_name = graph["Name"];
+    var r2 = graph["RSquared"];
+    r2 = Math.round(r2*10000)/10000; // trim float
 
     svg.selectAll(".dot")
       .data(data_points)
       .enter().append("circle")
-      .attr("r", 5)
+      .attr("r", 3)
       .attr("cx", function(d) { return x(d.X); })
       .attr("cy", function(d) { return y(d.Y); })
       .attr("fill", color);
@@ -95,7 +97,7 @@ d3.json("regression.json", function(error, data) {
       .attr("d", line);
 
     legend.append("li")
-      .text(graph_name)
+      .text(graph_name +", r\u00B2 = "+ r2)
       .style("font-size", "22px")
       .style("list-style-type", "none")
       .style("color", color);

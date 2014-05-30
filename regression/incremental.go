@@ -35,7 +35,7 @@ func main() {
 
 	var r stats.Regression
 
-	for i := 0; i < 25; i++ {
+	for i := 0; i < 20; i++ {
 		x := float64(i) * 3.0
 		y := rand.Float64()*100.0 - 25.0 // uniform samples in {-25, 75}
 		r.Update(x, y)
