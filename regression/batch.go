@@ -1,13 +1,3 @@
-//
-// regression_demo.go
-//
-// Can be compiled and run from the main GoStats directory using:
-// $ (cd demos/regression/ && make clean && make)
-// $ demos/regression/regression_demo
-//
-// Author:    Gary Boone
-//
-
 package main
 
 import (
@@ -39,14 +29,15 @@ func main() {
 
 	var slope, intercept, rsquared, count, slopeStdErr, intcptStdErr = stats.LinearRegression(xData, yData)
 
-	fmt.Printf("then request regression results, for example:\n")
-	fmt.Printf("      var slope, intercept, _, _, _, _ = stats.LinearRegression(xData, yData)\n")
-	fmt.Printf("** Linear Regression:\n")
-	fmt.Printf("slope = %v\n", slope)
-	fmt.Printf("intercept = %v\n", intercept)
-	fmt.Printf("r-squared = %v\n", rsquared)
-	fmt.Printf("count = %v\n", count)
-	fmt.Printf("slope standard error = %v\n", slopeStdErr)
-	fmt.Printf("intercept standard error = %v\n", intcptStdErr)
+	fmt.Println("slope", slope)
+	fmt.Println("intercept", intercept)
+	fmt.Println("r-squared", rsquared)
+	fmt.Println("count", count)
+	fmt.Println("slope standard error", slopeStdErr)
+	fmt.Println("intercept standard error", intcptStdErr)
+
+	// output the data and regression in a form suitable for d3.js graph drawing
+
+	// start with the original data
 
 }
