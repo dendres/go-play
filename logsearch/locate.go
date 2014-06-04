@@ -1,34 +1,12 @@
 package main
 
 import (
-	"fmt"
-	"time"
+	"github.com/go-martini/martini"
+	"log"
+	"net/http"
 )
 
 // find all events where "Error", "Java", and "Exception" all appear anywhere in the same event over the last 7 years
-
-/*
-Try 1: single data structure
-
-each event has tokens:
-  return events matching all tokens
-
-token lookup: token -> []event_id
-  return event_id's that appear in all sets with a single lookup
-
-problems:
-  single massive, constantly updating token -> []event_id table
-  pruning by date requires table scan and rewrite
-*/
-
-/*
-Try 2: map reduce
-
-for each day:
-  token -> []day_event_id
-merge(all day_event_id sets)
-7 year query requires 2555 index lookups and set operations
-*/
 
 /*
 Try 3: token combinations return days
@@ -112,8 +90,6 @@ bootstrap assumptions:
 * return json
 
 
-first fake it with static data in the example below
-
 
 
 choice of embedded, single-file db for terms:
@@ -136,35 +112,24 @@ hash tables:
   fixed header
   24 bytes per record
 
+*/
 
+/*
+first fake it with static data in the example below
 
+* web form makes terms
 
-
+pick web framework:
+* martini
+*
 
 
 */
-
 func main() {
-	format := "2006-01-02T15:04:05.000000-07:00"
+	m := martini.Classic()
+	m.Get("/", func() string {
+		return "Hello world!"
+	})
 
-	times := []string{
-		"1970-01-01T00:00:00.000000+00:00",
-		//		"2014-01-30T00:30:01.246899+00:00",
-	}
-
-	for m := 1; m < 13; m++ {
-		for d := 0; d < 31; d++ {
-			x := fmt.Sprintf("2014-%02d-%02dT00:00:00.000000+00:00", m, d)
-			times = append(times, x)
-		}
-	}
-
-	for i, time_string := range times {
-		t, err := time.Parse(format, time_string)
-		if err != nil {
-			fmt.Println("error parsing timestamp", err)
-		}
-		time_int := uint64(t.Unix())
-		fmt.Println(i, time_string, t, time_int)
-	}
+	log.Fatal(http.ListenAndServe(":8080", m))
 }
