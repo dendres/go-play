@@ -1,82 +1,115 @@
 
-
-Analysis to complete
-====================
-* ????
-
-
-pathologies of big data
-http://queue.acm.org/detail.cfm?id=156387
-
-Survey of the field:
-http://www.kuehnel.org/bachelor.pdf
-* rsyslog RELP transport???
-
-
 Goals
 =====
 
-* long-term offline storage of normalized events
-* case-independent exact-term search
-* file-based indexes
-* file-based results cache
-* sharding = separate instances of the whole service.. probably per-environment or per-service
+* store 7 years of normalized events at ~ 1TB of events per day.
+* find events containing terms
+* shard with separate instances of the whole service: per: organzation, environment, location etc...
 
-Interface
-=========
 
-* locate(downcased_term_list, time_range) returns term -> token -> day_stamp -> link
+Analysis
+========
+* Survey of the field http://www.kuehnel.org/bachelor.pdf
+* pathologies of big data http://queue.acm.org/detail.cfm?id=156387
+* comparison of golang embedded b+ indexes ????
+* comparison of golang embedded LSM indexes ????
 
-```
-{
-"timeout" : [
-    "TimeOut" : {
-        1404345600 : [
-            link,
-            link,
-        ]
-    },
-    "Timeout" : {
-        1403395200 : [
-            link,
-            link,
-        ]
-    }
-]
-}
-```
 
-* get([]links) returns link -> event
-
-Index Files
+Terminology
 ===========
 
-* for a given time period of long term storage, index files are assumed to be built once and never modified.
-* index: term -> token
-* index: token -> link
+term:
+* case insensitive unicode string without whitespace or punctuation
+* the human input to the search process
 
-Token Substitution
-==================
+combo:
+* sorted token combination
+* space separated
+* 1 to 4 tokens
 
-* a table of the 256 most frequent tokens
-* created from the token index
-* token(0..255) returns the token byte slice
-* xxxx([]byte) returns 0...255
+token:
+* case sensitive and preserving
+* key_name:value_token
 
-Event Store and Linking
-=======================
+key_name:
+* strip non-printable characters
+* strip whitespace
 
-* Store events for a given day in one big file
-* have a link syntax that allows for minimal disk seeks to retrieve a given event
-* find a way to allow the link syntax to roughly tell at least the hour of the day when the event took place?????
-* must be able to detect corruption of any byte in the file
-    checksum of the whole file after written
-    compression checksum of each event
+value_token:
+* case sensitive and preserving
+* contains punctuation
+* no whitespace
+* only printable characters
+* extracted from fields by white space only
+
+day_stamp:
+* seconds since epoch at the start of the day containing the event 00:00:00.0000000
+
+event_id:
+* daystamp
+* offset in that day's event store
 
 
-* could do CDB where time + checksum -> token substituted, compressed event
-* listB?
-* pick kv??
+7 year Indexes
+==============
+
+These should be read-optimized b+ trees:
+
+* term -> token
+* token -> []combo
+* combo -> []day_stamp
+
+
+Day Event Store
+===============
+
+* combo -> []event_id is a write-optimized LSM or CDB index
+* token table:null terminated, frequency sorted list of tokens
+* pile checksum
+
+Binary pile of compressed events:
+
+* operations: append(), get(offset), get_all()
+* can detect all corruption and mark any corrupt events in search results
+* event_id is offset in file
+
+Search Process
+==============
+
+* autocomplete string to terms conversion in browser
+* submit terms and return tokens
+* select and submit 1-4 tokens, get back list of combos
+* submit combo, return list of days
+* submit day,combo, return event_id's
+* submit event_id, return event
+
+
+Day Prune Process
+=================
+
+* pick day to prune and get day_stamp
+* for each combo in the combo -> []event_id index
+
+```
+find combo in combo -> []day_stamp index
+    remove day_stamp
+    if empty, delete combo
+    else write new value for combo
+    if empty, delete combo from term -> []combo index:
+        extract terms from combo
+        find all terms
+        remove combo from any terms that contain the combo
+        write new value for term
+        if term is empty, delete term
+```
+
+* delete per-day folder from S3 or object storage
+
+
+7 Year Index Backup and Restore
+===============================
+
+* boltdb snapshots or something?
 
 
 S3 partial download
@@ -85,3 +118,27 @@ S3 partial download
 * http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectGET.html
 * http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
 
+
+
+Old Attempts
+============
+
+Try 1: single data structure
+
+* token -> []event_id
+* return event_id's that appear in all sets with a single lookup
+
+problems:
+
+* single massive, constantly updating token -> []event_id table
+* pruning by date requires table scan and rewrite
+
+
+Try 2: map reduce
+
+```
+for each day:
+  token -> []day_event_id
+merge(all day_event_id sets)
+7 year query requires 2555 index lookups and set operations
+```
