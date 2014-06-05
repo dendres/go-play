@@ -1,7 +1,11 @@
 package main
 
 import (
+	//	"encoding/json"
+	"encoding/json"
+	"fmt"
 	"github.com/go-martini/martini"
+	"io"
 	"log"
 	"net/http"
 )
@@ -125,10 +129,52 @@ pick web framework:
 
 
 */
+
+type Terms struct {
+	Terms []string
+}
+
+// Decode takes the http Request body and returns a slice of string terms.
+func (t *Terms) Decode(body io.Reader) error {
+	decoder := json.NewDecoder(body)
+	err := decoder.Decode(&t)
+	if err != nil {
+		return fmt.Errorf("error decoding json request: %v", err)
+	}
+
+	return nil
+}
+
+type Response struct {
+	Name   string
+	Tokens []string
+}
+
 func main() {
 	m := martini.Classic()
-	m.Get("/", func() string {
-		return "Hello world!"
+	m.Post("/terms", func(r *http.Request) (int, string) {
+		t := Terms{}
+
+		err := t.Decode(r.Body)
+		if err != nil {
+			log.Println(err)
+			return 500, err.Error()
+		}
+
+		log.Println(t.Terms)
+
+		// pretending to lookup tokens for now
+
+		data := Response{
+			"hello",
+			[]string{"Token1", "FieldName:Token2", "id:555"},
+		}
+
+		b, err := json.Marshal(data)
+		if err != nil {
+			log.Println("json.Marshal error:", err)
+		}
+		return 200, string(b)
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", m))

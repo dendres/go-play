@@ -1,12 +1,17 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <style>
+  body { font-size: 16pt }
+  input { font-size: 13pt }
 </style>
 
 <body>
-  <form onsubmit="send_terms()">
-    Search: <input type="text" id="search" onKeyUp="show_terms()">
-  </form>
+  Search:
+  <input type="text" id="search_input" size="50">
+  </br>
+  Terms: <span id="show_terms"></span>
+  </br>
+  <button type="button" id="send_terms" >Send</button>
 </body>
 
 <script src="d3.js"></script>
