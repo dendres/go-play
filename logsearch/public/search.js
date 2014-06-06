@@ -33,7 +33,7 @@ window.onload=function(){
       .post(post_string, function(error, data){
         console.log("error = " + error);
         var out = JSON.parse(data.responseText);
-        console.log(out);
+        console.log("server response = " + out);
       });
 
   });

@@ -3,6 +3,7 @@ package main
 import (
 	"code.google.com/p/leveldb-go/leveldb/db"
 	"code.google.com/p/leveldb-go/leveldb/table"
+	"flag"
 	"log"
 )
 
@@ -19,13 +20,28 @@ bootstrap assumptions:
 */
 
 func main() {
-	dbname := "hello.db"
+
+	term := flag.String("term", nil, "lowercase single-word key term")
+	token := flag.String("token", nil, "case sensitive key:value token that would appear in an event")
+	flag.Parse()
+
+	dbname := "terms.db"
 	dbfs := db.DefaultFileSystem
 
+	f1, err := dbfs.Open(dbname)
+	// XXX if it's a not-exist error, then create the DB
+
 	f0, err := dbfs.Create(dbname)
-	if err != nil {
-		log.Fatalln("error creating db", err)
+		if err != nil {
+			log.Fatalln("error creating db", err)
+		}
+
+		w.Close() //must call to write to file
+
+
 	}
+
+	r := table.NewReader(f1, nil)
 
 	w := table.NewWriter(f0, nil)
 
@@ -36,10 +52,9 @@ func main() {
 	world := []byte("world of crap containing the whole world")
 	w.Set(hello, world, nil)
 
-	w.Close() //must call to write to file
 
-	f1, _ := dbfs.Open(dbname)
-	r := table.NewReader(f1, nil)
+
+
 
 	out, err := r.Get([]byte("hello"), nil)
 	if err != nil {
