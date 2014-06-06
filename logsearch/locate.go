@@ -19,14 +19,14 @@ term:
  - case insensitive unicode string without whitespace or punctuation
  - the human input to the search process
 
+token:
+ - case sensitive and preserving
+ - key_name:value_token
+
 combo:
  - sorted token combination
  - space separated
  - 1 to 4 tokens
-
-token:
- - case sensitive and preserving
- - key_name:value_token
 
 key_name:
  - strip non-printable characters
@@ -43,7 +43,7 @@ day_stamp:
  - seconds since epoch at the start of the day containing the event 00:00:00.0000000
 
 indexes covering all 7 years: read-optimized b+ trees:
- - term -> token
+ - term  -> []token
  - token -> []combo
  - combo -> []day_stamp
 
@@ -151,6 +151,10 @@ type Response struct {
 }
 
 func main() {
+
+	// go fireup the terms db handler and get a channel to send requests to
+	// termsChan := terms.Open(dbfilename)
+
 	m := martini.Classic()
 	m.Post("/terms", func(r *http.Request) (int, string) {
 		t := Terms{}
@@ -163,7 +167,9 @@ func main() {
 
 		log.Println(t.Terms)
 
-		// pretending to lookup tokens for now
+		// tokenRequest := &terms.Request{[]int{3, 4, 5}, sum, make(chan int)}
+		// termsChan <- tokenRequest
+		// tokens := <- tokenRequest.tokensChan
 
 		data := Response{
 			"hello",
