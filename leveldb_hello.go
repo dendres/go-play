@@ -33,17 +33,17 @@ func main() {
 	w.Set(hello, world, nil)
 	w.Close() //must call to write to file
 
-	f1, err := dbfs.Open(dbname)
-	if err != nil {
-		log.Fatalln("error getting record", err)
-	}
+	// f1, err := dbfs.Open(dbname)
+	// if err != nil {
+	// 	log.Fatalln("error getting record", err)
+	// }
 
-	r := table.NewReader(f1, nil)
+	// r := table.NewReader(f1, nil)
 
-	out, err := r.Get([]byte("hello"), nil)
-	if err != nil {
-		log.Fatalln("error getting record", err)
-	}
+	// out, err := r.Get([]byte("hello"), nil)
+	// if err != nil {
+	// 	log.Fatalln("error getting record", err)
+	// }
 
-	log.Println(string(out))
+	// log.Println(string(out))
 }

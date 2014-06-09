@@ -6,12 +6,18 @@
 </style>
 
 <body>
-  Search:
-  <input type="text" id="search_input" size="50">
-  </br>
-  Terms: <span id="show_terms"></span>
-  </br>
-  <button type="button" id="send_terms" >Send</button>
+  <div id="search_div">
+    Search:
+    <input type="text" id="search_input" size="50">
+    </br>
+    Terms: <span id="show_terms"></span>
+    </br>
+    <button type="button" id="send_terms" >Send</button>
+    </br>
+  </div>
+  <div id="tokens_div">
+    <ul id="tokens_found"></ul>
+  </div>
 </body>
 
 <script src="d3.js"></script>

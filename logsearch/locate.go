@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/dendres/go-play/ldbc"
+	"github.com/boltdb/bolt"
 	"github.com/go-martini/martini"
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 /*
@@ -73,20 +74,42 @@ func (t *Terms) Decode(body io.Reader) error {
 	return nil
 }
 
+// Tokens returns the tokens for the given terms as a map
+func (t *Terms) Tokens() (map[string][]string, error) {
+
+	db, err := bolt.Open("terms.db", 0666)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer db.Close()
+
+	tokens := make(map[string][]string)
+	bucket_name := []byte("terms")
+
+	db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(bucket_name)
+
+		for _, term := range t.Terms {
+			token_bytes := bucket.Get([]byte(term))
+			token_string := string(token_bytes)
+			token_list := strings.Split(token_string, " ")
+			log.Println("term =", term, "gave tokens =", token_list)
+			tokens[term] = token_list
+		}
+		return nil
+	})
+
+	return tokens, nil
+}
+
 type Response struct {
 	Name   string
-	Tokens []string
+	Tokens map[string][]string
 }
 
 // martini appears to run a pool of 6 handlers.
 // probably need to serialize leveldb reads through channel to single goroutine
 func main() {
-
-	termsChan, err := ldbc.Open("terms.db")
-	if err != nil {
-		log.Fatalf("unable to open db: %v", err)
-	}
-
 	m := martini.Classic()
 	m.Post("/terms", func(r *http.Request) (int, string) {
 		t := Terms{}
@@ -97,17 +120,15 @@ func main() {
 			return 500, err.Error()
 		}
 
-		log.Println("terms =", t.Terms)
-
-		termsRequest := ldbc.Request{[]byte("hello"), make(chan ldbc.Response)}
-		termsChan <- termsRequest
-
-		termsResponse := <-termsRequest.Vchan
-		log.Println("termsResponse =", termsResponse)
+		tokens, err := t.Tokens()
+		if err != nil {
+			log.Println("error looking up tokens in db:", err)
+			return 500, err.Error()
+		}
 
 		data := Response{
-			"hello",
-			[]string{"Token1", "FieldName:Token2", "id:555"},
+			"tokens",
+			tokens,
 		}
 
 		b, err := json.Marshal(data)
