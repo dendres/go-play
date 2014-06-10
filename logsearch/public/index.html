@@ -3,6 +3,7 @@
 <style>
   body { font-size: 16pt }
   input { font-size: 13pt }
+  .selected_token {background-color: #99FF66;}
 </style>
 
 <body>
@@ -12,12 +13,10 @@
     </br>
     Terms: <span id="show_terms"></span>
     </br>
-    <button type="button" id="send_terms" >Send</button>
+    <button type="button" id="send_terms" >Send Terms</button>
     </br>
   </div>
-  <div id="tokens_div">
-    <ul id="tokens_found"></ul>
-  </div>
+  <div id="tokens_div"></div>
 </body>
 
 <script src="d3.js"></script>

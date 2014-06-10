@@ -59,6 +59,47 @@ pick web framework:
 
 */
 
+// assumes a json array
+// decodes into slice of string
+// does db lookup of all strings
+// returns json encoded map[string]string
+func BoltJson(db_name string, bucket_name string, body io.Reader) (string, error) {
+	m := make(map[string]string)
+	o := make([]string) // list of strings from JSON
+
+	err := json.NewDecoder(body).decoder.Decode(&o)
+	if err != nil {
+		return m, fmt.Errorf("error decoding json request: %v", err)
+	}
+
+	db, err := bolt.Open(db_name, 0666)
+	if err != nil {
+		return m, fmt.Errorf("error opening db: %v", err)
+	}
+	defer db.Close()
+
+	db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(bucket_name))
+
+		for _, key := range o {
+			key_bytes := []byte(key)
+			value_bytes := bucket.Get(key_bytes)
+			if value_bytes != nil {
+				value := string(value_bytes)
+				m[key] = value
+			}
+		}
+		return nil
+	})
+
+	serialized_map, err := json.Marshal(m)
+	if err != nil {
+		log.Println("json.Marshal error:", err)
+	}
+
+	return serialized_map, nil
+}
+
 type Terms struct {
 	Terms []string
 }
@@ -91,10 +132,12 @@ func (t *Terms) Tokens() (map[string][]string, error) {
 
 		for _, term := range t.Terms {
 			token_bytes := bucket.Get([]byte(term))
-			token_string := string(token_bytes)
-			token_list := strings.Split(token_string, " ")
-			log.Println("term =", term, "gave tokens =", token_list)
-			tokens[term] = token_list
+			if token_bytes != nil {
+				token_string := string(token_bytes)
+				token_list := strings.Split(token_string, " ")
+				log.Println("term =", term, "gave tokens =", token_list)
+				tokens[term] = token_list
+			}
 		}
 		return nil
 	})
@@ -136,6 +179,13 @@ func main() {
 			log.Println("json.Marshal error:", err)
 		}
 		return 200, string(b)
+	})
+
+	m.Post("/tokens", func(r *http.Request) (int, string) {
+
+		j, err := BoltJson("terms.db", "tokens", r.body)
+		// XXXXXXXXXXXXXXXXXXXXXXXXXX
+		return 200, "{\"hello\":\"there\"}"
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", m))
