@@ -29,23 +29,24 @@ window.onload=function(){
 
   // send tokens and handle the combos??????
   var sending_tokens = function(tokens) {
-    post("/tokens", {"Tokens":tokens}, function(data){
+    post("/tokens", tokens, function(data){
       console.log(data);
       // XXXX setup the next round!!!!
     });
   };
 
+  // terms is a global that gets updated by text input
   var sending_terms = function() {
-    post("/terms", {"Terms": terms}, function(data){
-      console.log(data);
+    post("/terms", terms, function(data){
+
       // clear out any old results
       d3.selectAll("#tokens_div *").remove();
 
       // consolidate tokens into a single list
       // XXX not merging for now. there will be duplicates
       tokens_list = [];
-      for (var terms in data.Tokens) {
-        var tokens = data.Tokens[terms];
+      for (var term in data) {
+        var tokens = data[term];
         for (var i in tokens) {
           var token = tokens[i];
           tokens_list.push(token);
@@ -83,7 +84,7 @@ window.onload=function(){
         .on("click", function(datum, index){
           var tokens = [];
           d3.selectAll(".selected_token").each(function(d,i){
-            tokens.push(d[0]);
+            tokens.push(d);
           });
 
           sending_tokens(tokens);

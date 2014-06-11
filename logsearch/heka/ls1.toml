@@ -1,0 +1,34 @@
+
+[hekad]
+share_dir = "/opt/heka/share/heka"
+
+[syslog]
+type = "LogstreamerInput"
+log_directory = "/var/log"
+file_match = 'secure'
+decoder = "RsyslogDecoder"
+
+[RsyslogDecoder]
+type = "SandboxDecoder"
+script_type = "lua"
+filename = "/home/done/heka/sandbox/lua/decoders/rsyslog.lua"
+
+[RsyslogDecoder.config]
+template = '%TIMESTAMP% %HOSTNAME% %syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n'
+tz = "America/Los_Angeles"
+
+
+[counter_output]
+type = "LogOutput"
+message_matcher = "TRUE"
+encoder = "PayloadEncoder"
+
+[counter_file]
+type = "FileOutput"
+message_matcher = "TRUE"
+path = "/var/log/heka.log"
+prefix_ts = true
+perm = "666"
+flush_count = 100
+flush_operator = "OR"
+format = "protobufstream"

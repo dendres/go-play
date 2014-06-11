@@ -22,28 +22,25 @@ term:
 * case insensitive unicode string without whitespace or punctuation
 * the human input to the search process
 
-combo:
-* sorted token combination
-* space separated
-* 1 to 4 tokens
-
 token:
-* case sensitive and preserving
-* key_name:value_token
+* key_name + value_token
 
 key_name:
+* case sensitive and preserving
 * strip non-printable characters
 * strip whitespace
 
 value_token:
 * case sensitive and preserving
-* contains punctuation
-* no whitespace
-* only printable characters
-* extracted from fields by white space only
+* strip non-printable characters
+* strip whitespace
+* contains some punctuation
+* limited in length
 
 day_stamp:
 * seconds since epoch at the start of the day containing the event 00:00:00.0000000
+* 4 bytes, uint32 each rolls over in 2106
+* converted to base 10 millis for javascript
 
 event_id:
 * daystamp
@@ -53,17 +50,16 @@ event_id:
 7 year Indexes
 ==============
 
-These should be read-optimized b+ trees:
+* term -> []token: stored as space separated strings
+* token -> []hour: 6byte hour = 4byte epoch + 2byte count
 
-* term -> token
-* token -> []combo
-* combo -> []day_stamp
+hours in 7 years = 61320
 
 
-Day Event Store
+Hour Event Store
 ===============
 
-* combo -> []event_id is a write-optimized LSM or CDB index
+* token -> []event_id  fixed-width x-byte event_id's ??????
 * token table:null terminated, frequency sorted list of tokens
 * pile checksum
 
@@ -76,34 +72,39 @@ Binary pile of compressed events:
 Search Process
 ==============
 
-* autocomplete string to terms conversion in browser
+step 1: exclude irrelevant hours
+
+List hours in which all tokens were found at least once in any message during the hour.
+
+* text input gets a good list of terms
 * submit terms and return tokens
-* select and submit 1-4 tokens, get back list of combos
-* submit combo, return list of days
-* submit day,combo, return event_id's
-* submit event_id, return event
+* select and submit tokens
+* return hours containing ALL tokens
+* histogram by week or month
+
+step 2: detailed search over a small time range
+
+* pull the per-hour data from object storage
+* load events into indexes capable of compound queries
+* query the per-hour indexes
 
 
-Day Prune Process
+Hour Prune Process
 =================
 
-* pick day to prune and get day_stamp
+* pick hour to prune and get hour_stamp
 * for each combo in the combo -> []event_id index
 
 ```
-find combo in combo -> []day_stamp index
-    remove day_stamp
-    if empty, delete combo
-    else write new value for combo
-    if empty, delete combo from term -> []combo index:
-        extract terms from combo
-        find all terms
-        remove combo from any terms that contain the combo
-        write new value for term
-        if term is empty, delete term
+find token in token -> []hour index
+    remove hour
+    if empty, delete token:
+       find all terms containing token????
+       remove token from each
+       if last entry, delete term
 ```
 
-* delete per-day folder from S3 or object storage
+* delete per-hour folder/file??? from S3 or object storage
 
 
 7 Year Index Backup and Restore
