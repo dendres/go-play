@@ -1,0 +1,51 @@
+#!/bin/bash
+
+
+SOURCE="${BASH_SOURCE[0]}"
+
+# resolve $SOURCE until the file is no longer a symlink
+while [ -h "$SOURCE" ]; do
+    DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+    SOURCE="$(readlink "$SOURCE")"
+
+    # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+
+DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+problem_number=$1
+if [ -z $problem_number ]; then
+   echo missing problem_number argument
+   exit 1
+fi
+
+problem_name=p$problem_number
+problem_dir=$DIR/$problem_name
+
+if [ ! -e $problem_dir ]; then
+    echo missing $problem_dir
+    exit 1
+fi
+
+test=${problem_name}.test
+prof=${problem_name}.prof
+svg=${problem_name}.svg
+
+
+echo running $problem_dir
+cd $problem_dir
+
+go test -c
+if [ ! -e $test ]; then
+    echo missing $test
+    exit 1
+fi
+
+./$test -test.bench=B -test.cpuprofile=$prof
+if [ ! -e $prof ]; then
+    echo missing $prof
+    exit 1
+fi
+
+go tool pprof --svg $test $prof > $svg
