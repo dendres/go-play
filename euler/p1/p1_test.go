@@ -1,7 +1,6 @@
 package p0
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -22,6 +21,7 @@ func IsMultiple(x int) bool {
 	return false
 }
 
+// BenchmarkSumMultiplesBelow 200000 6976 ns/op
 func SumMultiplesBelow(x int) int {
 	total := 0
 	for i := 1; i < x; i++ {
@@ -56,7 +56,49 @@ func TestSumMultiplesBelow(t *testing.T) {
 	}
 }
 
-func BenchmarkAdd(b *testing.B) {
-	out := SumMultiplesBelow(1000)
-	fmt.Println(out)
+func BenchmarkSumMultiplesBelow(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		SumMultiplesBelow(1000)
+	}
+}
+
+// see if you can do it with only addition operations
+// XXX multiples of 15 are counted twice... have to subtract to count them only once
+// BenchmarkSB2 5000000 456 ns/op
+func SB2(max int) int {
+	total := 0
+	for t := 3; t < max; t = t + 3 {
+		total += t
+	}
+	for f := 5; f < max; f = f + 5 {
+		total += f
+	}
+	for f := 15; f < max; f = f + 15 {
+		total -= f
+	}
+	return total
+}
+
+type Case struct {
+	Max      int
+	Expected int
+}
+
+func TestSB2(t *testing.T) {
+	cases := []Case{
+		Case{10, 23},
+		Case{1000, 233168},
+	}
+
+	for _, c := range cases {
+		if out := SB2(c.Max); out != c.Expected {
+			t.Fatal(c.Max, "should be", c.Expected, ", but got", out)
+		}
+	}
+}
+
+func BenchmarkSB2(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		SB2(1000)
+	}
 }
