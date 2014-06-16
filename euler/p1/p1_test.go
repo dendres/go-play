@@ -62,7 +62,7 @@ func BenchmarkSumMultiplesBelow(b *testing.B) {
 	}
 }
 
-// see if you can do it with only addition operations
+// google hint to use geometric series... avoiding the repetative mod operation
 // XXX multiples of 15 are counted twice... have to subtract to count them only once
 // BenchmarkSB2 5000000 456 ns/op
 func SB2(max int) int {
@@ -100,5 +100,85 @@ func TestSB2(t *testing.T) {
 func BenchmarkSB2(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		SB2(1000)
+	}
+}
+
+/*
+folks on the forum claim you can calculate the series without iteration????
+
+take +3 series...
+0       3       6       9       12
+3 * 0 + 3 * 1 + 3 * 2 + 3 * 3 + 3 * 4
+3 (0 + 1 + 2.... + n)
+
+http://en.wikipedia.org/wiki/1_%2B_2_%2B_3_%2B_4_%2B_%E2%8B%AF#Partial_sums
+
+0 + 1 + 2 + 3 + 4 + 5 = 15
+triangular number because stack points in equilateral triangle
+it's like (5*5)/2... but if you do that you skip half of the bottom row of the triangle
+so you have to add another row: (5*5 + 5)/2
+which can also be written n(n+1)/2, n=5
+
+so now the sum of the nth number of the 3 series is 3( n(n+1)/2  )
+
+also... using uint to avoid having to check for negative number input
+*/
+func SumSeries(a, n uint) uint {
+	return a * (n * (n + 1)) / 2
+}
+
+type SSCase struct {
+	Series uint
+	N      uint
+	Sum    uint
+}
+
+func TestSumSeries(t *testing.T) {
+	cases := []SSCase{
+		SSCase{3, 0, 0},
+		SSCase{3, 1, 3},
+		SSCase{3, 2, 9},
+		SSCase{3, 3, 18},
+		SSCase{3, 4, 30},
+		SSCase{5, 0, 0},
+		SSCase{5, 1, 5},
+		SSCase{5, 2, 15},
+		SSCase{5, 3, 30},
+		SSCase{5, 4, 50},
+	}
+
+	for _, c := range cases {
+		if s := SumSeries(c.Series, c.N); s != c.Sum {
+			t.Fatal("SumSeries of", c.N, "should be", c.Sum, ", but got", s)
+		}
+	}
+}
+
+func SB3(max uint) uint {
+	max = max - 1 // "less than, not equal 2, max"
+	return SumSeries(3, max/3) + SumSeries(5, max/5) - SumSeries(15, max/15)
+}
+
+type Case2 struct {
+	Max, Expected uint
+}
+
+func TestSB3(t *testing.T) {
+	cases := []Case2{
+		Case2{10, 23},
+		Case2{1000, 233168},
+	}
+
+	for _, c := range cases {
+		if out := SB3(c.Max); out != c.Expected {
+			t.Fatal(c.Max, "should be", c.Expected, ", but got", out)
+		}
+	}
+}
+
+// BenchmarkSB3100000000 11.6 ns/op
+func BenchmarkSB3(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		SB3(1000)
 	}
 }

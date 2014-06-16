@@ -1,0 +1,29 @@
+
+May 28 03:32:01 baker0 logrotate: ALERT exited abnormally with [1]
+May 28 09:26:34 baker0 dhclient[935]: DHCPREQUEST on eth0 to 169.254.1.0 port 67 (xid=0x104133fb)
+May 28 09:26:34 baker0 dhclient[935]: DHCPACK from 169.254.1.0 (xid=0x104133fb)
+May 28 09:26:36 baker0 dhclient[935]: bound to 10.232.4.214 -- renewal in 35563 seconds.
+May 28 19:19:19 baker0 dhclient[935]: DHCPREQUEST on eth0 to 169.254.1.0 port 67 (xid=0x104133fb)
+May 28 19:19:19 baker0 dhclient[935]: DHCPACK from 169.254.1.0 (xid=0x104133fb)
+May 28 19:19:21 baker0 dhclient[935]: bound to 10.232.4.214 -- renewal in 36253 seconds.
+
+May 29 03:10:01 baker0 logrotate: ALERT exited abnormally with [1]
+May 29 05:23:34 baker0 dhclient[935]: DHCPREQUEST on eth0 to 169.254.1.0 port 67 (xid=0x104133fb)
+May 29 05:23:34 baker0 dhclient[935]: DHCPACK from 169.254.1.0 (xid=0x104133fb)
+May 29 05:23:36 baker0 dhclient[935]: bound to 10.232.4.214 -- renewal in 35234 seconds.
+May 29 15:10:50 baker0 dhclient[935]: DHCPREQUEST on eth0 to 169.254.1.0 port 67 (xid=0x104133fb)
+
+May 29 15:10:50 baker0 dhclient[935]: DHCPACK from 169.254.1.0 (xid=0x104133fb)
+May 29 15:10:52 baker0 dhclient[935]: bound to 10.232.4.214 -- renewal in 42597 seconds.
+May 29 17:38:35 baker0 nrpe[23581]: Caught SIGTERM - shutting down...
+May 29 17:38:35 baker0 nrpe[23581]: Cannot remove pidfile '/var/run/nrpe/nrpe.pid' - check your privileges.
+May 29 17:38:35 baker0 nrpe[23581]: Daemon shutdown
+May 29 17:38:35 baker0 nrpe[6796]: Starting up daemon
+May 29 17:38:35 baker0 nrpe[6796]: Listening for connections on port 5666
+May 29 17:38:35 baker0 nrpe[6796]: Allowing connections from: 127.0.0.1,10.0.0.0/8,192.168.0.0/16
+May 29 21:08:41 baker0 nrpe[6796]: Caught SIGTERM - shutting down...
+May 29 21:08:41 baker0 nrpe[6796]: Cannot remove pidfile '/var/run/nrpe/nrpe.pid' - check your privileges.
+May 29 21:08:41 baker0 nrpe[6796]: Daemon shutdown
+May 29 21:08:42 baker0 nrpe[12936]: Starting up daemon
+May 29 21:08:42 baker0 nrpe[12936]: Listening for connections on port 5666
+May 29 21:08:42 baker0 nrpe[12936]: Allowing connections from: 127.0.0.1,10.0.0.0/8,192.168.0.0/16
