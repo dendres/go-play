@@ -26,6 +26,13 @@ http://stackoverflow.com/questions/9452701/ukkonens-suffix-tree-algorithm-in-pla
 
 https://www.cs.helsinki.fi/u/ukkonen/SuffixT1withFigs.pdf
 
+
+https://www.youtube.com/watch?v=F3nbY3hIDLQ
+suffix tree:
+ - if order doesn't matter, node = hash map
+ - if order does matter, then node = "tray" ????
+
+
 */
 
 type Un struct {
