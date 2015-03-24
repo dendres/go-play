@@ -12,8 +12,8 @@ import (
 
 // print the current time in a number of serializations
 func main() {
-	// now := time.Now()
-	now := time.Unix(9223372036854775807, 999999999)
+	now := time.Now()
+	// now := time.Unix(9223372036854775807, 999999999)
 	sec := now.Unix() // int64
 	nsec := int64(now.Nanosecond())
 
